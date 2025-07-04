@@ -7,6 +7,7 @@ require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const BACKEND_URL = process.env.BACKEND_URL || `http://localhost:${PORT}/api`;
 
 // Cache configuration
 const cache = new Map();
@@ -869,6 +870,6 @@ app.use((err, req, res, next) => {
 // Start server
 app.listen(PORT, () => {
   console.log(`🎬 Cinema Nexus Backend running on port ${PORT}`);
-  console.log(`🔗 Health check: http://localhost:${PORT}/api/health`);
+  console.log(`🔗 Health check: ${BACKEND_URL}/health`);
   console.log('🚀 Backend ready to serve requests!');
 }); 

@@ -19,6 +19,7 @@ cp .env.example .env
 
 3. Configure environment variables in `.env`:
 ```
+BACKEND_URL=http://localhost:5000/api
 TMDB_API_KEY=your_tmdb_api_key_here
 TMDB_BASE_URL=https://api.themoviedb.org/3
 PORT=5000
