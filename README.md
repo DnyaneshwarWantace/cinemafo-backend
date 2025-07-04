@@ -84,21 +84,47 @@ Note: Streaming will only work once the domain is whitelisted by the streaming p
 
 
 
-ps aux | grep node
-Unit your-backend-service.service could not be found.
-root       12184  0.2  1.7 11538344 70888 ?      Ssl  11:18   0:03 node /var/www/moviebackend/server.js
-root       12429  0.0  0.0   7076  2048 pts/0    S+   11:45   0:00 grep --color=auto node
-root@cinemafo-s-2vcpu-4gb-sfo3-01:/var/www/cinema-nexus-stream# sudo tail -f /var/log/nginx/error.log
-2025/07/03 15:12:43 [error] 1654#1654: *118 rewrite or internal redirection cycle while internally redirecting to "/index.html", client: 206.81.24.74, server: ecomtrage.com, request: "GET /.DS_Store HTTP/1.1", host: "24.144.84.120"
-2025/07/03 15:12:44 [error] 1654#1654: *119 rewrite or internal redirection cycle while internally redirecting to "/index.html", client: 206.81.24.74, server: ecomtrage.com, request: "GET /.env HTTP/1.1", host: "24.144.84.120"
-2025/07/03 15:12:44 [error] 1654#1654: *120 rewrite or internal redirection cycle while internally redirecting to "/index.html", client: 206.81.24.74, server: ecomtrage.com, request: "GET /.git/config HTTP/1.1", host: "24.144.84.120"
-2025/07/03 15:12:44 [error] 1654#1654: *121 rewrite or internal redirection cycle while internally redirecting to "/index.html", client: 206.81.24.74, server: ecomtrage.com, request: "GET /s/032313e24383e2434313e24323/_/;/META-INF/maven/com.atlassian.jira/jira-webapp-dist/pom.properties HTTP/1.1", host: "24.144.84.120"
-2025/07/03 15:12:45 [error] 1654#1654: *122 rewrite or internal redirection cycle while internally redirecting to "/index.html", client: 206.81.24.74, server: ecomtrage.com, request: "GET /config.json HTTP/1.1", host: "24.144.84.120"
-2025/07/03 15:12:45 [error] 1654#1654: *123 rewrite or internal redirection cycle while internally redirecting to "/index.html", client: 206.81.24.74, server: ecomtrage.com, request: "GET /telescope/requests HTTP/1.1", host: "24.144.84.120"
-2025/07/03 15:12:46 [error] 1654#1654: *124 rewrite or internal redirection cycle while internally redirecting to "/index.html", client: 206.81.24.74, server: ecomtrage.com, request: "GET /info.php HTTP/1.1", host: "24.144.84.120"
-2025/07/03 15:12:46 [error] 1654#1654: *125 rewrite or internal redirection cycle while internally redirecting to "/index.html", client: 206.81.24.74, server: ecomtrage.com, request: "GET /?rest_route=/wp/v2/users/ HTTP/1.1", host: "24.144.84.120"
-2025/07/04 10:02:31 [error] 11415#11415: *185 rewrite or internal redirection cycle while internally redirecting to "/index.html", client: 24.144.84.120, server: ecomtrage.com, request: "GET /api/movies/trending HTTP/1.1", host: "24.144.84.120"
-2025/07/04 10:06:40 [error] 11461#11461: *186 rewrite or internal redirection cycle while internally redirecting to "/index.html", client: 24.144.84.120, server: ecomtrage.com, request: "GET /api/movies/trending HTTP/1.1", host: "24.144.84.120"
+i backend is also pointing to the frontend  and frontned giving the cros error 
+@https://api.cinemafo.lol/api/tv/popular backend https://cinemafo.lol/ frontend domain
+hook.js:608 404 Error: User attempted to access non-existent route: /api/tv/popular
+# HTTP Redirect to HTTPS
+server {
+  listen 80;
+  server_name www.cinemafo.lol www.api.cinemafo.lol;
 
+  return 301 https://$host$request_uri;
+}
 
-like the backend is running on th @https://api.cinemafo.lol  and frontned https://cinemafo.lol 
+# FRONTEND: https://www.cinemafo.lol
+server {
+  listen 443 ssl;
+  server_name www.cinemafo.lol;
+
+  root /var/www/cinema-nexus-stream/dist;
+  index index.html;
+
+  ssl_certificate /etc/letsencrypt/live/www.cinemafo.lol/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/www.cinemafo.lol/privkey.pem;
+
+  location / {
+    try_files $uri /index.html;
+  }
+}
+
+# BACKEND: https://www.api.cinemafo.lol
+server {
+  listen 443 ssl;
+  server_name www.api.cinemafo.lol;
+
+  ssl_certificate /etc/letsencrypt/live/www.cinemafo.lol/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/www.cinemafo.lol/privkey.pem;
+
+  location / {
+    proxy_pass http://localhost:5000;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection 'upgrade';
+    proxy_set_header Host $host;
+    proxy_cache_bypass $http_upgrade;
+  }
+}

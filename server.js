@@ -64,6 +64,18 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// Add cache control headers to prevent CDN caching
+app.use('/api', (req, res, next) => {
+  // Prevent Cloudflare and other CDNs from caching API responses
+  res.set({
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+    'Surrogate-Control': 'no-store'
+  });
+  next();
+});
+
 // Enhanced TMDB API call with caching and retry logic
 async function fetchFromTMDB(endpoint, params = {}) {
   const cacheKey = getCacheKey(endpoint, params);
