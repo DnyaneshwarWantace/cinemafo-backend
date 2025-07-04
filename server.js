@@ -808,6 +808,96 @@ app.get('/api/movies/:id/trailer', async (req, res) => {
   }
 });
 
+// Get trailer with quality options
+app.get('/api/trailer/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const cacheKey = `trailer_${id}`;
+    const cached = getFromCache(cacheKey);
+    if (cached) return res.json(cached);
+
+    const data = await fetchFromTMDB(`/movie/${id}/videos`);
+    const trailers = data.results.filter(video => video.type === 'Trailer' && video.site === 'YouTube');
+    
+    if (trailers.length > 0) {
+      const trailer = trailers[0];
+      const result = {
+        trailerUrl: `https://www.youtube.com/watch?v=${trailer.key}`,
+        youtubeUrl: `https://www.youtube.com/watch?v=${trailer.key}`,
+        currentQuality: { quality: 'HD', formatId: 'hd', label: 'High Definition' },
+        availableQualities: [
+          { quality: 'HD', formatId: 'hd', label: 'High Definition' },
+          { quality: 'SD', formatId: 'sd', label: 'Standard Definition' }
+        ]
+      };
+      setCache(cacheKey, result);
+      res.json(result);
+    } else {
+      res.status(404).json({ error: 'No trailer found' });
+    }
+  } catch (error) {
+    console.error('Error fetching trailer:', error);
+    res.status(500).json({ error: 'Failed to fetch trailer' });
+  }
+});
+
+// Get trailer quality
+app.get('/api/trailer/:id/quality/:formatId', async (req, res) => {
+  try {
+    const { id, formatId } = req.params;
+    const cacheKey = `trailer_quality_${id}_${formatId}`;
+    const cached = getFromCache(cacheKey);
+    if (cached) return res.json(cached);
+
+    const data = await fetchFromTMDB(`/movie/${id}/videos`);
+    const trailers = data.results.filter(video => video.type === 'Trailer' && video.site === 'YouTube');
+    
+    if (trailers.length > 0) {
+      const trailer = trailers[0];
+      const result = {
+        trailerUrl: `https://www.youtube.com/watch?v=${trailer.key}`,
+        quality: formatId === 'hd' ? 'HD' : 'SD'
+      };
+      setCache(cacheKey, result);
+      res.json(result);
+    } else {
+      res.status(404).json({ error: 'No trailer found' });
+    }
+  } catch (error) {
+    console.error('Error fetching trailer quality:', error);
+    res.status(500).json({ error: 'Failed to fetch trailer quality' });
+  }
+});
+
+// Get trailer download
+app.get('/api/trailer/:id/download/:formatId?', async (req, res) => {
+  try {
+    const { id, formatId } = req.params;
+    const cacheKey = `trailer_download_${id}_${formatId || 'default'}`;
+    const cached = getFromCache(cacheKey);
+    if (cached) return res.json(cached);
+
+    const data = await fetchFromTMDB(`/movie/${id}/videos`);
+    const trailers = data.results.filter(video => video.type === 'Trailer' && video.site === 'YouTube');
+    
+    if (trailers.length > 0) {
+      const trailer = trailers[0];
+      const result = {
+        downloadUrl: `https://www.youtube.com/watch?v=${trailer.key}`,
+        filename: `movie_${id}_trailer.mp4`,
+        quality: formatId === 'hd' ? 'HD' : 'SD'
+      };
+      setCache(cacheKey, result);
+      res.json(result);
+    } else {
+      res.status(404).json({ error: 'No trailer found' });
+    }
+  } catch (error) {
+    console.error('Error fetching trailer download:', error);
+    res.status(500).json({ error: 'Failed to fetch trailer download' });
+  }
+});
+
 // Get TV show trailers
 app.get('/api/tv/:id/trailer', async (req, res) => {
   try {
@@ -855,6 +945,108 @@ app.get('/api/stream/tv/:id/:season/:episode', (req, res) => {
     hls: `${STREAM_BASE_URL}/tv/${id}/${season}/${episode}/index.m3u8`,
     fallback: `${VIDSRC_BASE_URL}/tv?tmdb=${id}&season=${season}&episode=${episode}`,
     note: 'Streaming will be available once the domain is whitelisted'
+  });
+});
+
+// Additional API routes for frontend compatibility
+
+// Get movie genres (alternative route)
+app.get('/api/movies/genres', async (req, res) => {
+  try {
+    const cacheKey = 'movie_genres';
+    const cached = getFromCache(cacheKey);
+    if (cached) return res.json(cached);
+
+    const data = await fetchFromTMDB('/genre/movie/list');
+    setCache(cacheKey, data);
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching movie genres:', error);
+    res.status(500).json({ error: 'Failed to fetch movie genres' });
+  }
+});
+
+// Get TV genres (alternative route)
+app.get('/api/tv/genres', async (req, res) => {
+  try {
+    const cacheKey = 'tv_genres';
+    const cached = getFromCache(cacheKey);
+    if (cached) return res.json(cached);
+
+    const data = await fetchFromTMDB('/genre/tv/list');
+    setCache(cacheKey, data);
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching TV genres:', error);
+    res.status(500).json({ error: 'Failed to fetch TV genres' });
+  }
+});
+
+// Get movies by genre (alternative route)
+app.get('/api/movies/genre/:genreId', async (req, res) => {
+  try {
+    const { genreId } = req.params;
+    const cacheKey = `movies_genre_${genreId}`;
+    const cached = getFromCache(cacheKey);
+    if (cached) return res.json(cached);
+
+    const data = await fetchFromTMDB('/discover/movie', { with_genres: genreId });
+    setCache(cacheKey, data);
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching movies by genre:', error);
+    res.status(500).json({ error: 'Failed to fetch movies by genre' });
+  }
+});
+
+// Get TV shows by genre (alternative route)
+app.get('/api/tv/genre/:genreId', async (req, res) => {
+  try {
+    const { genreId } = req.params;
+    const cacheKey = `tv_genre_${genreId}`;
+    const cached = getFromCache(cacheKey);
+    if (cached) return res.json(cached);
+
+    const data = await fetchFromTMDB('/discover/tv', { with_genres: genreId });
+    setCache(cacheKey, data);
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching TV shows by genre:', error);
+    res.status(500).json({ error: 'Failed to fetch TV shows by genre' });
+  }
+});
+
+// 404 handler for undefined routes
+app.use('*', (req, res) => {
+  console.log(`404 Error: User attempted to access non-existent route: ${req.originalUrl}`);
+  res.status(404).json({ 
+    error: 'Route not found',
+    message: `The route ${req.originalUrl} does not exist`,
+    availableRoutes: [
+      '/api/health',
+      '/api/movies/trending',
+      '/api/movies/popular',
+      '/api/movies/top-rated',
+      '/api/movies/upcoming',
+      '/api/movies/now-playing',
+      '/api/movies/genres',
+      '/api/movies/genre/:genreId',
+      '/api/movies/:id',
+      '/api/movies/:id/trailer',
+      '/api/tv/trending',
+      '/api/tv/popular',
+      '/api/tv/top-rated',
+      '/api/tv/genres',
+      '/api/tv/genre/:genreId',
+      '/api/tv/:id',
+      '/api/tv/:id/trailer',
+      '/api/trailer/:id',
+      '/api/trailer/:id/quality/:formatId',
+      '/api/trailer/:id/download/:formatId',
+      '/api/search',
+      '/api/stream/movie/:id',
+      '/api/stream/tv/:id/:season/:episode'
+    ]
   });
 });
 
