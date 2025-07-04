@@ -868,7 +868,7 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🎬 Cinema Nexus Backend running on port ${PORT}`);
   console.log(`🔗 Health check: ${BACKEND_URL}/health`);
   console.log('🚀 Backend ready to serve requests!');
