@@ -58,9 +58,10 @@ const VIDSRC_BASE_URL = process.env.VIDSRC_BASE_URL || 'https://vidsrc.xyz/embed
 
 // Middleware
 app.use(cors({
-  origin: '*',
+  origin: ['https://cinemafo.lol', 'https://www.cinemafo.lol', 'http://localhost:8080'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 }));
 app.use(express.json());
 
@@ -829,6 +830,38 @@ app.get('/api/tv/:id/trailer', async (req, res) => {
   } catch (error) {
     console.error('Error fetching TV show trailer:', error);
     res.status(500).json({ error: 'Failed to fetch TV show trailer' });
+  }
+});
+
+// Get available languages for content
+app.get('/api/:type/:id/languages', async (req, res) => {
+  try {
+    const { type, id } = req.params;
+    const cacheKey = `languages_${type}_${id}`;
+    const cached = getFromCache(cacheKey);
+    if (cached) return res.json(cached);
+
+    // Get content details to extract available languages
+    const contentDetails = await fetchFromTMDB(`/${type}/${id}`);
+    
+    // Extract spoken languages and available translations
+    const languages = contentDetails.spoken_languages || [];
+    
+    const result = {
+      content_id: id,
+      content_type: type,
+      languages: languages.map(lang => ({
+        iso_639_1: lang.iso_639_1,
+        name: lang.name,
+        english_name: lang.english_name || lang.name
+      }))
+    };
+
+    setCache(cacheKey, result);
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching available languages:', error);
+    res.status(500).json({ error: 'Failed to fetch available languages' });
   }
 });
 
