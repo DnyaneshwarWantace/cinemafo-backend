@@ -58,7 +58,7 @@ const VIDSRC_BASE_URL = process.env.VIDSRC_BASE_URL || 'https://vidsrc.xyz/embed
 
 // Middleware
 app.use(cors({
-  origin: ['https://cinemafo.lol', 'https://www.cinemafo.lol', 'http://localhost:8080'],
+  origin: ['https://cinemafo.lol', 'https://api.cinemafo.lol', 'http://localhost:8080', 'http://localhost:3000'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
@@ -897,6 +897,26 @@ app.use((err, req, res, next) => {
   res.status(500).json({ 
     error: 'Internal server error',
     message: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
+});
+
+// Catch-all route for unmatched API requests
+app.use('/api/*', (req, res) => {
+  console.log(`❌ 404 Error: API route not found: ${req.originalUrl}`);
+  res.status(404).json({ 
+    error: 'API route not found',
+    route: req.originalUrl,
+    message: `The API endpoint ${req.originalUrl} does not exist`
+  });
+});
+
+// Catch-all for non-API requests (should not happen in API-only backend)
+app.use('*', (req, res) => {
+  console.log(`❌ 404 Error: Non-API route accessed: ${req.originalUrl}`);
+  res.status(404).json({ 
+    error: 'This is an API-only server',
+    route: req.originalUrl,
+    message: 'This server only serves API endpoints. Frontend should be served separately.'
   });
 });
 
