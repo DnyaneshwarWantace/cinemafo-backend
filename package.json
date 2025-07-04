@@ -7,7 +7,12 @@
     "start": "node server.js",
     "dev": "nodemon server.js"
   },
-  "keywords": ["cinema", "movies", "trailers", "yt-dlp"],
+  "keywords": [
+    "cinema",
+    "movies",
+    "trailers",
+    "yt-dlp"
+  ],
   "author": "Cinema Nexus",
   "license": "MIT",
   "dependencies": {
@@ -20,4 +25,4 @@
   "devDependencies": {
     "nodemon": "^3.0.3"
   }
-} 
+}
