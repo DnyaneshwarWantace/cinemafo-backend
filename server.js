@@ -6,6 +6,24 @@ require('dotenv').config();
 require('dotenv').config();
 
 const app = express();
+// ✅ CORS middleware
+app.use(cors({
+  origin: [
+    'https://cinemafo.lol',
+    'https://api.cinemafo.lol',
+    'http://localhost:8080',
+    'http://localhost:3000'
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
+
+// ✅ Handle preflight OPTIONS
+app.options('*', cors());
+
+// ✅ JSON body parser
+app.use(express.json());
 const PORT = process.env.PORT || 5000;
 const BACKEND_URL = process.env.BACKEND_URL || `http://localhost:${PORT}/api`;
 
@@ -56,13 +74,23 @@ const TMDB_BASE_URL = process.env.TMDB_BASE_URL || 'https://api.themoviedb.org/3
 const STREAM_BASE_URL = process.env.STREAM_BASE_URL || 'https://mia.vidjoy.wtf';
 const VIDSRC_BASE_URL = process.env.VIDSRC_BASE_URL || 'https://vidsrc.xyz/embed';
 
-// Middleware
+// ✅ CORS middleware
 app.use(cors({
-  origin: ['https://cinemafo.lol', 'https://api.cinemafo.lol', 'http://localhost:8080', 'http://localhost:3000'],
+  origin: [
+    'https://cinemafo.lol',
+    'https://api.cinemafo.lol',
+    'http://localhost:8080',
+    'http://localhost:3000'
+  ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
+
+// ✅ Handle preflight OPTIONS
+app.options('*', cors());
+
+// ✅ JSON body parser
 app.use(express.json());
 
 // Enhanced TMDB API call with caching and retry logic
