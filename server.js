@@ -64,24 +64,6 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Add cache control headers to prevent CDN caching
-app.use('/api', (req, res, next) => {
-  // Log every API request
-  console.log(`🌐 API Request: ${req.method} ${req.originalUrl} from ${req.ip}`);
-  console.log(`🔍 User-Agent: ${req.get('User-Agent')}`);
-  
-  // Prevent Cloudflare and other CDNs from caching API responses
-  res.set({
-    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-    'Pragma': 'no-cache',
-    'Expires': '0',
-    'Surrogate-Control': 'no-store',
-    'CF-Cache-Status': 'BYPASS',
-    'X-Backend-Hit': 'true'
-  });
-  next();
-});
-
 // Enhanced TMDB API call with caching and retry logic
 async function fetchFromTMDB(endpoint, params = {}) {
   const cacheKey = getCacheKey(endpoint, params);
@@ -270,17 +252,6 @@ const getMockUpcomingMovies = () => {
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// Simple test endpoint to verify browser connectivity
-app.get('/api/test-browser', (req, res) => {
-  console.log('🔥 TEST BROWSER ENDPOINT HIT!');
-  res.json({ 
-    message: 'Browser test successful!', 
-    timestamp: new Date().toISOString(),
-    userAgent: req.get('User-Agent'),
-    ip: req.ip
-  });
 });
 
 // Test TMDB connectivity
