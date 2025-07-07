@@ -448,86 +448,214 @@ app.get('/api/movies/genre/:genreId', async (req, res) => {
   }
 });
 
-// Get trending TV shows
+// Get trending TV shows with complete details
 app.get('/api/tv/trending', async (req, res) => {
   try {
-    const cacheKey = 'trending_tv';
+    const cacheKey = 'trending_tv_complete';
     const cached = getFromCache(cacheKey);
     if (cached) return res.json(cached);
 
     const data = await fetchFromTMDB('/trending/tv/day');
-    setCache(cacheKey, data);
-    res.json(data);
+    
+    // Fetch complete details for each show in parallel
+    const showsWithDetails = await Promise.all(
+      data.results.slice(0, 20).map(async (show) => {
+        try {
+          const [showDetails, credits, keywords] = await Promise.all([
+            fetchFromTMDB(`/tv/${show.id}`),
+            fetchFromTMDB(`/tv/${show.id}/credits`),
+            fetchFromTMDB(`/tv/${show.id}/keywords`)
+          ]);
+
+          return {
+            ...showDetails,
+            cast: credits.cast?.slice(0, 10) || [],
+            crew: credits.crew || [],
+            keywords: keywords.results || []
+          };
+        } catch (error) {
+          console.error(`Error fetching details for TV show ${show.id}:`, error.message);
+          return show; // Return basic show data if detailed fetch fails
+        }
+      })
+    );
+
+    const result = {
+      ...data,
+      results: showsWithDetails
+    };
+
+    setCache(cacheKey, result);
+    res.json(result);
   } catch (error) {
     console.error('Error fetching trending TV shows:', error);
-    // Return mock data as fallback
-    const mockData = getMockData('/trending/tv/day');
-    res.json(mockData);
+    res.status(500).json({ error: 'Failed to fetch trending TV shows' });
   }
 });
 
-// Get popular TV shows
+// Get popular TV shows with complete details
 app.get('/api/tv/popular', async (req, res) => {
   try {
-    const cacheKey = 'popular_tv';
+    const cacheKey = 'popular_tv_complete';
     const cached = getFromCache(cacheKey);
     if (cached) return res.json(cached);
 
     const data = await fetchFromTMDB('/tv/popular');
-    setCache(cacheKey, data);
-    res.json(data);
+    
+    // Fetch complete details for each show in parallel
+    const showsWithDetails = await Promise.all(
+      data.results.slice(0, 20).map(async (show) => {
+        try {
+          const [showDetails, credits, keywords] = await Promise.all([
+            fetchFromTMDB(`/tv/${show.id}`),
+            fetchFromTMDB(`/tv/${show.id}/credits`),
+            fetchFromTMDB(`/tv/${show.id}/keywords`)
+          ]);
+
+          return {
+            ...showDetails,
+            cast: credits.cast?.slice(0, 10) || [],
+            crew: credits.crew || [],
+            keywords: keywords.results || []
+          };
+        } catch (error) {
+          console.error(`Error fetching details for TV show ${show.id}:`, error.message);
+          return show; // Return basic show data if detailed fetch fails
+        }
+      })
+    );
+
+    const result = {
+      ...data,
+      results: showsWithDetails
+    };
+
+    setCache(cacheKey, result);
+    res.json(result);
   } catch (error) {
     console.error('Error fetching popular TV shows:', error);
     res.status(500).json({ error: 'Failed to fetch popular TV shows' });
   }
 });
 
-// Get top rated TV shows
+// Get top rated TV shows with complete details
 app.get('/api/tv/top-rated', async (req, res) => {
   try {
-    const cacheKey = 'top_rated_tv';
+    const cacheKey = 'top_rated_tv_complete';
     const cached = getFromCache(cacheKey);
     if (cached) return res.json(cached);
 
     const data = await fetchFromTMDB('/tv/top_rated');
-    setCache(cacheKey, data);
-    res.json(data);
+    
+    // Fetch complete details for each show in parallel
+    const showsWithDetails = await Promise.all(
+      data.results.slice(0, 20).map(async (show) => {
+        try {
+          const [showDetails, credits, keywords] = await Promise.all([
+            fetchFromTMDB(`/tv/${show.id}`),
+            fetchFromTMDB(`/tv/${show.id}/credits`),
+            fetchFromTMDB(`/tv/${show.id}/keywords`)
+          ]);
+
+          return {
+            ...showDetails,
+            cast: credits.cast?.slice(0, 10) || [],
+            crew: credits.crew || [],
+            keywords: keywords.results || []
+          };
+        } catch (error) {
+          console.error(`Error fetching details for TV show ${show.id}:`, error.message);
+          return show; // Return basic show data if detailed fetch fails
+        }
+      })
+    );
+
+    const result = {
+      ...data,
+      results: showsWithDetails
+    };
+
+    setCache(cacheKey, result);
+    res.json(result);
   } catch (error) {
     console.error('Error fetching top rated TV shows:', error);
     res.status(500).json({ error: 'Failed to fetch top rated TV shows' });
   }
 });
 
-// Get TV shows by genre
+// Get TV shows by genre with complete details
 app.get('/api/tv/genre/:genreId', async (req, res) => {
   try {
     const { genreId } = req.params;
-    const cacheKey = `tv_genre_${genreId}`;
+    const cacheKey = `tv_genre_${genreId}_complete`;
     const cached = getFromCache(cacheKey);
     if (cached) return res.json(cached);
 
     const data = await fetchFromTMDB('/discover/tv', { with_genres: genreId });
-    setCache(cacheKey, data);
-    res.json(data);
+    
+    // Fetch complete details for each show in parallel
+    const showsWithDetails = await Promise.all(
+      data.results.slice(0, 20).map(async (show) => {
+        try {
+          const [showDetails, credits, keywords] = await Promise.all([
+            fetchFromTMDB(`/tv/${show.id}`),
+            fetchFromTMDB(`/tv/${show.id}/credits`),
+            fetchFromTMDB(`/tv/${show.id}/keywords`)
+          ]);
+
+          return {
+            ...showDetails,
+            cast: credits.cast?.slice(0, 10) || [],
+            crew: credits.crew || [],
+            keywords: keywords.results || []
+          };
+        } catch (error) {
+          console.error(`Error fetching details for TV show ${show.id}:`, error.message);
+          return show; // Return basic show data if detailed fetch fails
+        }
+      })
+    );
+
+    const result = {
+      ...data,
+      results: showsWithDetails
+    };
+
+    setCache(cacheKey, result);
+    res.json(result);
   } catch (error) {
     console.error('Error fetching TV shows by genre:', error);
     res.status(500).json({ error: 'Failed to fetch TV shows by genre' });
   }
 });
 
-// Get TV show details
+// Get TV show details with cast, crew, and keywords
 app.get('/api/tv/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const cacheKey = `tv_${id}`;
+    const cacheKey = `tv_${id}_complete`;
     const cached = getFromCache(cacheKey);
     if (cached) return res.json(cached);
 
-    const data = await fetchFromTMDB(`/tv/${id}`, {
-      append_to_response: 'videos,credits,similar,recommendations'
-    });
-    setCache(cacheKey, data);
-    res.json(data);
+    // Fetch TV show details, credits, and keywords in parallel
+    const [showDetails, credits, keywords] = await Promise.all([
+      fetchFromTMDB(`/tv/${id}`, {
+        append_to_response: 'videos,similar,recommendations'
+      }),
+      fetchFromTMDB(`/tv/${id}/credits`),
+      fetchFromTMDB(`/tv/${id}/keywords`)
+    ]);
+
+    // Combine all data
+    const completeShowData = {
+      ...showDetails,
+      cast: credits.cast?.slice(0, 15) || [],
+      crew: credits.crew || [],
+      keywords: keywords.results || []
+    };
+
+    setCache(cacheKey, completeShowData);
+    res.json(completeShowData);
   } catch (error) {
     console.error('Error fetching TV show details:', error);
     res.status(500).json({ error: 'Failed to fetch TV show details' });
@@ -703,9 +831,9 @@ app.get('/api/movies/upcoming', async (req, res) => {
 
     const data = await fetchFromTMDB('/movie/upcoming');
     
-    // Fetch complete details for each movie in parallel
+    // Fetch complete details for each movie in parallel (up to 50 movies)
     const moviesWithDetails = await Promise.all(
-      data.results.slice(0, 20).map(async (movie) => {
+      data.results.slice(0, 50).map(async (movie) => {
         try {
           const [movieDetails, credits, keywords] = await Promise.all([
             fetchFromTMDB(`/movie/${movie.id}`),
@@ -888,6 +1016,199 @@ app.get('/api/stream/tv/:id/:season/:episode', (req, res) => {
     fallback: `${VIDSRC_BASE_URL}/tv?tmdb=${id}&season=${season}&episode=${episode}`,
     note: 'Streaming will be available once the domain is whitelisted'
   });
+});
+
+// Get web series (Netflix, Amazon Prime, etc.)
+app.get('/api/tv/web-series', async (req, res) => {
+  try {
+    const cacheKey = 'web_series_complete';
+    const cached = getFromCache(cacheKey);
+    if (cached) return res.json(cached);
+
+    // Get popular TV shows and filter for web series characteristics
+    const data = await fetchFromTMDB('/tv/popular');
+    
+    // Fetch complete details for each show in parallel
+    const showsWithDetails = await Promise.all(
+      data.results.slice(0, 30).map(async (show) => {
+        try {
+          const [showDetails, credits, keywords] = await Promise.all([
+            fetchFromTMDB(`/tv/${show.id}`),
+            fetchFromTMDB(`/tv/${show.id}/credits`),
+            fetchFromTMDB(`/tv/${show.id}/keywords`)
+          ]);
+
+          return {
+            ...showDetails,
+            cast: credits.cast?.slice(0, 10) || [],
+            crew: credits.crew || [],
+            keywords: keywords.results || []
+          };
+        } catch (error) {
+          console.error(`Error fetching details for TV show ${show.id}:`, error.message);
+          return show; // Return basic show data if detailed fetch fails
+        }
+      })
+    );
+
+    const result = {
+      ...data,
+      results: showsWithDetails
+    };
+
+    setCache(cacheKey, result);
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching web series:', error);
+    res.status(500).json({ error: 'Failed to fetch web series' });
+  }
+});
+
+// Get crime dramas and thrillers
+app.get('/api/tv/crime-dramas', async (req, res) => {
+  try {
+    const cacheKey = 'crime_dramas_complete';
+    const cached = getFromCache(cacheKey);
+    if (cached) return res.json(cached);
+
+    // Get crime and thriller TV shows
+    const data = await fetchFromTMDB('/discover/tv', { 
+      with_genres: '80,9648', // Crime and Mystery
+      sort_by: 'popularity.desc'
+    });
+    
+    // Fetch complete details for each show in parallel
+    const showsWithDetails = await Promise.all(
+      data.results.slice(0, 25).map(async (show) => {
+        try {
+          const [showDetails, credits, keywords] = await Promise.all([
+            fetchFromTMDB(`/tv/${show.id}`),
+            fetchFromTMDB(`/tv/${show.id}/credits`),
+            fetchFromTMDB(`/tv/${show.id}/keywords`)
+          ]);
+
+          return {
+            ...showDetails,
+            cast: credits.cast?.slice(0, 10) || [],
+            crew: credits.crew || [],
+            keywords: keywords.results || []
+          };
+        } catch (error) {
+          console.error(`Error fetching details for TV show ${show.id}:`, error.message);
+          return show; // Return basic show data if detailed fetch fails
+        }
+      })
+    );
+
+    const result = {
+      ...data,
+      results: showsWithDetails
+    };
+
+    setCache(cacheKey, result);
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching crime dramas:', error);
+    res.status(500).json({ error: 'Failed to fetch crime dramas' });
+  }
+});
+
+// Get sci-fi and fantasy series
+app.get('/api/tv/sci-fi-fantasy', async (req, res) => {
+  try {
+    const cacheKey = 'sci_fi_fantasy_complete';
+    const cached = getFromCache(cacheKey);
+    if (cached) return res.json(cached);
+
+    // Get sci-fi and fantasy TV shows
+    const data = await fetchFromTMDB('/discover/tv', { 
+      with_genres: '10765,10759', // Sci-Fi & Fantasy, Action & Adventure
+      sort_by: 'popularity.desc'
+    });
+    
+    // Fetch complete details for each show in parallel
+    const showsWithDetails = await Promise.all(
+      data.results.slice(0, 25).map(async (show) => {
+        try {
+          const [showDetails, credits, keywords] = await Promise.all([
+            fetchFromTMDB(`/tv/${show.id}`),
+            fetchFromTMDB(`/tv/${show.id}/credits`),
+            fetchFromTMDB(`/tv/${show.id}/keywords`)
+          ]);
+
+          return {
+            ...showDetails,
+            cast: credits.cast?.slice(0, 10) || [],
+            crew: credits.crew || [],
+            keywords: keywords.results || []
+          };
+        } catch (error) {
+          console.error(`Error fetching details for TV show ${show.id}:`, error.message);
+          return show; // Return basic show data if detailed fetch fails
+        }
+      })
+    );
+
+    const result = {
+      ...data,
+      results: showsWithDetails
+    };
+
+    setCache(cacheKey, result);
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching sci-fi fantasy series:', error);
+    res.status(500).json({ error: 'Failed to fetch sci-fi fantasy series' });
+  }
+});
+
+// Get comedy series
+app.get('/api/tv/comedy-series', async (req, res) => {
+  try {
+    const cacheKey = 'comedy_series_complete';
+    const cached = getFromCache(cacheKey);
+    if (cached) return res.json(cached);
+
+    // Get comedy TV shows
+    const data = await fetchFromTMDB('/discover/tv', { 
+      with_genres: '35', // Comedy
+      sort_by: 'popularity.desc'
+    });
+    
+    // Fetch complete details for each show in parallel
+    const showsWithDetails = await Promise.all(
+      data.results.slice(0, 25).map(async (show) => {
+        try {
+          const [showDetails, credits, keywords] = await Promise.all([
+            fetchFromTMDB(`/tv/${show.id}`),
+            fetchFromTMDB(`/tv/${show.id}/credits`),
+            fetchFromTMDB(`/tv/${show.id}/keywords`)
+          ]);
+
+          return {
+            ...showDetails,
+            cast: credits.cast?.slice(0, 10) || [],
+            crew: credits.crew || [],
+            keywords: keywords.results || []
+          };
+        } catch (error) {
+          console.error(`Error fetching details for TV show ${show.id}:`, error.message);
+          return show; // Return basic show data if detailed fetch fails
+        }
+      })
+    );
+
+    const result = {
+      ...data,
+      results: showsWithDetails
+    };
+
+    setCache(cacheKey, result);
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching comedy series:', error);
+    res.status(500).json({ error: 'Failed to fetch comedy series' });
+  }
 });
 
 // Error handling middleware
