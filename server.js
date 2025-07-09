@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const NodeCache = require('node-cache');
+const mongoose = require('mongoose');
+const adminRoutes = require('./routes/admin');
 require('dotenv').config();
 require('dotenv').config();
 
@@ -63,6 +65,27 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 app.use(express.json());
+
+// Routes - mount admin routes at /api/admin
+app.use('/api/admin', adminRoutes);
+
+// Start server only after MongoDB connects
+const startServer = async () => {
+  try {
+    await mongoose.connect(process.env.DATABASE_URL || 'mongodb://localhost:27017/cinema-nexus');
+    console.log('MongoDB connected successfully');
+    
+    app.listen(PORT, () => {
+      console.log(`Server is running on port ${PORT}`);
+      console.log(`API base URL: ${BACKEND_URL}`);
+    });
+  } catch (err) {
+    console.error('Failed to connect to MongoDB:', err);
+    process.exit(1);
+  }
+};
+
+startServer();
 
 // Enhanced TMDB API call with caching and retry logic
 async function fetchFromTMDB(endpoint, params = {}) {
@@ -1218,11 +1241,4 @@ app.use((err, req, res, next) => {
     error: 'Internal server error',
     message: process.env.NODE_ENV === 'development' ? err.message : undefined
   });
-});
-
-// Start server
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🎬 Cinema Nexus Backend running on port ${PORT}`);
-  console.log(`🔗 Health check: ${BACKEND_URL}/health`);
-  console.log('🚀 Backend ready to serve requests!');
 }); 
