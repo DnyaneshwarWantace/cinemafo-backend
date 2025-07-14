@@ -69,6 +69,116 @@ app.use(express.json());
 // Routes - mount admin routes at /api/admin
 app.use('/api/admin', adminRoutes);
 
+// Niggaflix streaming endpoints
+app.get('/api/stream/movie/:tmdbId', async (req, res) => {
+  try {
+    const { tmdbId } = req.params;
+    const checkUrl = `http://checker.niggaflix.xyz/verify/movie/${tmdbId}`;
+    
+    // Perform a HEAD request to check if the file exists
+    await axios.head(checkUrl);
+    
+    // If the request is successful, return the proxied stream URL
+    res.json({ 
+      stream: { 
+        url: `/api/proxy/movie/${tmdbId}`,
+        type: 'hls',
+        name: 'Niggaflix HLS',
+        language: 'en'
+      } 
+    });
+  } catch (error) {
+    // If the file is not found or another error occurs
+    res.status(404).json({ error: "Movie file not found" });
+  }
+});
+
+app.get('/api/stream/tv/:tmdbId/:season/:episode', async (req, res) => {
+  try {
+    const { tmdbId, season, episode } = req.params;
+    const checkUrl = `http://checker.niggaflix.xyz/verify/tv/${tmdbId}/${season}/${episode}`;
+    
+    // Perform a HEAD request to check if the file exists
+    await axios.head(checkUrl);
+    
+    // If the request is successful, return the proxied stream URL
+    res.json({ 
+      stream: { 
+        url: `/api/proxy/tv/${tmdbId}/${season}/${episode}`,
+        type: 'hls',
+        name: 'Niggaflix HLS',
+        language: 'en'
+      } 
+    });
+  } catch (error) {
+    // If the file is not found or another error occurs
+    res.status(404).json({ error: "TV episode file not found" });
+  }
+});
+
+// Proxy endpoints for actual video streams
+app.get('/api/proxy/movie/:tmdbId', async (req, res) => {
+  try {
+    const { tmdbId } = req.params;
+    const streamUrl = `http://niggaflix.xyz/movies/${tmdbId}/index.m3u8`;
+    
+    // Proxy the request to niggaflix
+    const response = await axios.get(streamUrl, {
+      responseType: 'stream',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    });
+    
+    // Set appropriate headers for HLS streaming
+    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    
+    // Pipe the stream to the response
+    response.data.pipe(res);
+  } catch (error) {
+    console.error('Proxy error for movie:', error.message);
+    res.status(404).json({ error: "Stream not available" });
+  }
+});
+
+app.get('/api/proxy/tv/:tmdbId/:season/:episode', async (req, res) => {
+  try {
+    const { tmdbId, season, episode } = req.params;
+    const streamUrl = `http://niggaflix.xyz/tv/${tmdbId}/${season}/${episode}/index.m3u8`;
+    
+    // Proxy the request to niggaflix
+    const response = await axios.get(streamUrl, {
+      responseType: 'stream',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    });
+    
+    // Set appropriate headers for HLS streaming
+    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    
+    // Pipe the stream to the response
+    response.data.pipe(res);
+  } catch (error) {
+    console.error('Proxy error for TV:', error.message);
+    res.status(404).json({ error: "Stream not available" });
+  }
+});
+
+// Handle OPTIONS requests for CORS preflight
+app.options('/api/proxy/*', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.status(200).end();
+});
+
 // Start server only after MongoDB connects
 const startServer = async () => {
   try {
