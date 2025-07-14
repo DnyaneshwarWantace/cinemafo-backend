@@ -75,16 +75,6 @@ const siteSettingsSchema = new mongoose.Schema({
       imageUrl: { type: String, default: "" },
       clickUrl: { type: String, default: "" }
     },
-    upcomingPageAd: {
-      enabled: { type: Boolean, default: false },
-      imageUrl: { type: String, default: "" },
-      clickUrl: { type: String, default: "" }
-    },
-    upcomingPageBottomAd: {
-      enabled: { type: Boolean, default: false },
-      imageUrl: { type: String, default: "" },
-      clickUrl: { type: String, default: "" }
-    },
     playerPageAd: {
       enabled: { type: Boolean, default: false },
       imageUrl: { type: String, default: "" },

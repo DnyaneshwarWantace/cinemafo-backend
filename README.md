@@ -19,7 +19,7 @@ cp .env.example .env
 
 3. Configure environment variables in `.env`:
 ```
-BACKEND_URL=http://localhost:5000/api
+BACKEND_URL=https://cinemafo.lol/api
 TMDB_API_KEY=your_tmdb_api_key_here
 TMDB_BASE_URL=https://api.themoviedb.org/3
 PORT=5000
@@ -120,7 +120,7 @@ server {
   ssl_certificate_key /etc/letsencrypt/live/www.cinemafo.lol/privkey.pem;
 
   location / {
-    proxy_pass http://localhost:5000;
+    proxy_pass https://cinemafo.lol;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection 'upgrade';
