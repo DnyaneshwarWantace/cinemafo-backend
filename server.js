@@ -30,7 +30,7 @@ const getCacheKey = (url, params = {}) => {
   const paramString = Object.keys(params).length > 0 ? `?${new URLSearchParams(params).toString()}` : '';
   return `${url}${paramString}`;
 };
-
+//cache helper function
 const getFromCache = (key) => {
   const cached = cache.get(key);
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
