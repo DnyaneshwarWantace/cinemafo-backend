@@ -1,9 +1,26 @@
-# Cinema Nexus Backend
+# Cinema Nexus Frontend
 
-Backend server for the Cinema Nexus streaming platform. This server provides:
-- TMDB API proxy middleware
-- Movie and TV show streaming endpoints
-- Caching layer for better performance
+Modern streaming platform frontend built with React, TypeScript, and Tailwind CSS.
+
+## Features
+
+- 🎬 Movie and TV show streaming with HLS support
+- 🎥 Trailer playback with quality options
+- 🎨 Netflix-inspired UI with gradient blues theme
+- 🔍 Advanced search functionality
+- 📱 Fully responsive design
+- 🚀 Fast loading with top bar progress
+- 🎭 Genre filtering and sorting
+- 💫 Smooth animations and transitions
+
+## Tech Stack
+
+- React + TypeScript
+- Tailwind CSS for styling
+- Shadcn/ui components
+- HLS.js for video playback
+- React Router for navigation
+- Lucide icons
 
 ## Setup
 
@@ -12,56 +29,59 @@ Backend server for the Cinema Nexus streaming platform. This server provides:
 npm install
 ```
 
-2. Create `.env` file:
+2. Start development server:
 ```bash
-cp .env.example .env
-```
-
-3. Configure environment variables in `.env`:
-```
-BACKEND_URL=https://cinemafo.lol/api
-TMDB_API_KEY=your_tmdb_api_key_here
-TMDB_BASE_URL=https://api.themoviedb.org/3
-PORT=5000
-DISCORD_INVITE=your_discord_invite_link_here
-STREAM_BASE_URL=https://mia.vidjoy.wtf
-VIDSRC_BASE_URL=https://vidsrc.xyz/embed
-```
-
-4. Start the server:
-```bash
-# Development
 npm run dev
-
-# Production
-npm start
 ```
 
-## API Endpoints
+3. Build for production:
+```bash
+npm run build
+```
 
-### Health Check
-- `GET /api/health` - Check server status
+## Project Structure
 
-### Movies
-- `GET /api/movies/trending` - Get trending movies
-- `GET /api/movies/top-rated` - Get top rated movies
-- `GET /api/movies/:id` - Get movie details with videos, credits, etc.
-- `GET /api/search/movies?query=search_term` - Search movies
-- `GET /api/genres/movies` - Get movie genres list
+```
+src/
+├── components/      # UI components
+│   ├── ui/         # Shadcn components
+│   └── ...         # Custom components
+├── hooks/          # Custom React hooks
+├── lib/           # Utility functions
+├── pages/         # Page components
+└── styles/        # Global styles
+```
 
-### Streaming
-- `GET /api/stream/movie/:id` - Get movie stream URLs (HLS + fallback)
-- `GET /api/stream/tv/:id/:season/:episode` - Get TV show stream URLs
+## Environment Variables
 
-Note: Streaming will only work once the domain is whitelisted by the streaming provider.
+Create `.env` file:
+```
+VITE_BACKEND_URL=https://cinemafo.lol/api
+VITE_DISCORD_URL=your_discord_invite_url
+```
 
 ## Features
 
-- TMDB API proxy to avoid CORS and ISP blocking issues
-- Response caching for better performance
-- Error handling with retry logic
-- Streaming endpoints with fallback options
-- CORS enabled for frontend access 
+### Pages
+- Home: Trending and top-rated content
+- Movies: Browse and filter movies
+- Shows: TV show browsing
+- Search: Advanced search functionality
+
+### Components
+- HeroSlider: Featured content showcase
+- MovieModal: Movie details and playback
+- VideoPlayer: HLS streaming with fallback
+- Navigation: Responsive header with active states
+- LoadingBar: Progress indicator for navigation
+
+### Streaming
+- HLS playback for high-quality streaming
+- Automatic fallback to alternative sources
+- Quality selection when available
+- Trailer support with multiple qualities
+
+Note: Streaming functionality requires domain whitelisting by the provider.
 
 
 
@@ -84,47 +104,26 @@ Note: Streaming will only work once the domain is whitelisted by the streaming p
 
 
 
-i backend is also pointing to the frontend  and frontned giving the cros error 
-@https://api.cinemafo.lol/api/tv/popular backend https://cinemafo.lol/ frontend domain
-hook.js:608 404 Error: User attempted to access non-existent route: /api/tv/popular
-# HTTP Redirect to HTTPS
-server {
-  listen 80;
-  server_name www.cinemafo.lol www.api.cinemafo.lol;
 
-  return 301 https://$host$request_uri;
-}
 
-# FRONTEND: https://www.cinemafo.lol
-server {
-  listen 443 ssl;
-  server_name www.cinemafo.lol;
 
-  root /var/www/cinema-nexus-stream/dist;
-  index index.html;
 
-  ssl_certificate /etc/letsencrypt/live/www.cinemafo.lol/fullchain.pem;
-  ssl_certificate_key /etc/letsencrypt/live/www.cinemafo.lol/privkey.pem;
 
-  location / {
-    try_files $uri /index.html;
-  }
-}
 
-# BACKEND: https://www.api.cinemafo.lol
-server {
-  listen 443 ssl;
-  server_name www.api.cinemafo.lol;
 
-  ssl_certificate /etc/letsencrypt/live/www.cinemafo.lol/fullchain.pem;
-  ssl_certificate_key /etc/letsencrypt/live/www.cinemafo.lol/privkey.pem;
 
-  location / {
-    proxy_pass https://cinemafo.lol;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection 'upgrade';
-    proxy_set_header Host $host;
-    proxy_cache_bypass $http_upgrade;
-  }
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,308 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom scrollbar for desktop only */
+@media (min-width: 768px) {
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    border-radius: 4px;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+  }
+  
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
+/* Hide scrollbar for movie carousels */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+@layer base {
+  :root {
+    --background: 220 13% 9%;
+    --foreground: 0 0% 95%;
+    --card: 220 13% 9%;
+    --card-foreground: 0 0% 95%;
+    --popover: 220 13% 9%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 0 0% 100%;
+    --primary-foreground: 220 13% 9%;
+    --secondary: 220 13% 18%;
+    --secondary-foreground: 0 0% 95%;
+    --muted: 220 13% 18%;
+    --muted-foreground: 0 0% 65%;
+    --accent: 220 13% 18%;
+    --accent-foreground: 0 0% 95%;
+    --destructive: 217 91% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 13% 18%;
+    --input: 220 13% 18%;
+    --ring: 217 91% 60%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+    background: linear-gradient(135deg, #0f0f0f 0%, #1a1a2e 50%, #16213e 100%);
+    min-height: 100vh;
+  }
+}
+
+@layer components {
+  .loading-bar {
+    @apply fixed top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-600 via-blue-500 to-blue-400 z-50;
+    animation: loading 2s ease-in-out infinite;
+  }
+  
+  .hero-slider {
+    background: linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.8));
+  }
+  
+  .card-hover {
+    transition: all 0.3s ease;
+  }
+  
+  .card-hover:hover {
+    transform: scale(1.05);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  }
+  
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* Netflix-style video player controls with blue theme */
+  .netflix-player {
+    background: linear-gradient(135deg, rgba(0,0,0,0.8) 0%, rgba(20,20,20,0.9) 100%);
+  }
+  
+  .netflix-controls {
+    background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 100%);
+    backdrop-filter: blur(8px);
+  }
+  
+  .netflix-button {
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    border: none;
+    transition: all 0.2s ease;
+  }
+  
+  .netflix-button:hover {
+    background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+    transform: scale(1.05);
+  }
+  
+  .netflix-quality-menu {
+    background: rgba(0,0,0,0.95);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.8);
+  }
+  
+  /* Hide scrollbars completely for trailer modal */
+  .trailer-modal {
+    overflow: hidden !important;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+  
+  .trailer-modal::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+  
+  /* Ensure video element fills screen properly */
+  video:fullscreen {
+    width: 100vw !important;
+    height: 100vh !important;
+    object-fit: contain !important;
+  }
+  
+  video:-webkit-full-screen {
+    width: 100vw !important;
+    height: 100vh !important;
+    object-fit: contain !important;
+  }
+  
+  video:-ms-fullscreen {
+    width: 100vw !important;
+    height: 100vh !important;
+    object-fit: contain !important;
+  }
+}
+
+@keyframes loading {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100vw); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.fade-in {
+  animation: fadeIn 0.5s ease-in;
+}
+
+/* Video Player Styles with blue theme */
+.gradient-progress-bar {
+  background: linear-gradient(90deg, #3b82f6 0%, #1d4ed8 50%, #60a5fa 100%);
+}
+
+.skip-intro-pulse {
+  animation: skipIntroPulse 2s ease-in-out infinite;
+}
+
+@keyframes skipIntroPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+  }
+}
+
+/* Video player container styles */
+.video-player-container {
+  background: #000;
+}
+
+/* Settings menu styles */
+.settings-menu {
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8);
+}
+
+/* Custom crystal triangle play button */
+.crystal-play-button {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.9) 0%, rgba(29, 78, 216, 0.9) 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+  border: 2px solid rgba(59, 130, 246, 0.3);
+  box-shadow: 
+    0 0 20px rgba(59, 130, 246, 0.4),
+    inset 0 0 20px rgba(255, 255, 255, 0.1);
+}
+
+.crystal-play-button:hover {
+  transform: scale(1.1);
+  box-shadow: 
+    0 0 30px rgba(59, 130, 246, 0.6),
+    inset 0 0 30px rgba(255, 255, 255, 0.2);
+}
+
+.crystal-play-button::before {
+  content: '';
+  position: absolute;
+  width: 0;
+  height: 0;
+  border-left: 20px solid white;
+  border-top: 12px solid transparent;
+  border-bottom: 12px solid transparent;
+  margin-left: 4px;
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.5));
+}
+
+.crystal-play-button::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  background: linear-gradient(45deg, transparent, rgba(59, 130, 246, 0.3), transparent);
+  border-radius: 50%;
+  z-index: -1;
+  animation: crystalShine 3s ease-in-out infinite;
+}
+
+@keyframes crystalShine {
+  0%, 100% {
+    opacity: 0.3;
+    transform: rotate(0deg);
+  }
+  50% {
+    opacity: 0.8;
+    transform: rotate(180deg);
+  }
+}
+
+/* Gradient glow effects */
+.gradient-glow {
+  box-shadow: 
+    0 0 20px rgba(59, 130, 246, 0.3),
+    0 0 40px rgba(59, 130, 246, 0.1);
+}
+
+.gradient-border {
+  border: 2px solid transparent;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8) border-box;
+  -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: destination-out;
+  mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+}
+
+/* Shine effect for premium feel */
+.shine-effect {
+  position: relative;
+  overflow: hidden;
+}
+
+.shine-effect::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.shine-effect:hover::before {
+  left: 100%;
+}
