@@ -51,7 +51,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const initializedRef = useRef(false);
   const currentSourceUrlRef = useRef<string>('');
-  // skipIntroTimeoutRef removed
+  // skipIntroTimeoutRef removed for now
   
   const [isPlaying, setIsPlaying] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
