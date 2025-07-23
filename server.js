@@ -1038,7 +1038,7 @@ app.get('/api/stream/tv/:id/:season/:episode', async (req, res) => {
   }
 });
 
-// Note: Proxy endpoints removed as we now use encrypted niggaflix URLs directly
+// Note: Proxy endpoints removed as we now use encrypted niggaflix URLs directly new
 
 // Official movie stream endpoint with encrypted URL
 app.get("/api/official/movie/:tmdbid", async (req, res) => {
