@@ -47,20 +47,6 @@ const siteSettingsSchema = new mongoose.Schema({
     aboutUs: {
       type: String,
       default: 'Cinema.fo is your premier destination for streaming movies and TV shows.'
-    },
-    contactEmail: {
-      type: String,
-      default: 'contact@cinema.fo'
-    },
-    socialLinks: {
-      discord: {
-        type: String,
-        default: 'https://discord.gg/cinema-fo'
-      },
-      telegram: {
-        type: String,
-        default: 'https://t.me/cinema-fo'
-      }
     }
   },
   ads: {

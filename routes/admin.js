@@ -25,8 +25,7 @@ router.get('/public/settings', async (req, res) => {
       },
       content: {
         disclaimer: settings.content.disclaimer,
-        aboutUs: settings.content.aboutUs,
-        socialLinks: settings.content.socialLinks
+        aboutUs: settings.content.aboutUs
       },
       ads: settings.ads
     };
@@ -152,7 +151,7 @@ router.put('/settings/social-buttons', verifyToken, async (req, res) => {
 // Update content settings
 router.put('/settings/content', verifyToken, async (req, res) => {
   try {
-    const { disclaimer, aboutUs, contactEmail } = req.body;
+    const { disclaimer, aboutUs } = req.body;
     
     let settings = await SiteSettings.findOne();
     if (!settings) {
@@ -162,8 +161,7 @@ router.put('/settings/content', verifyToken, async (req, res) => {
     settings.content = {
       ...settings.content,
       disclaimer: disclaimer || '',
-      aboutUs: aboutUs || '',
-      contactEmail: contactEmail || ''
+      aboutUs: aboutUs || ''
     };
     
     await settings.save();
