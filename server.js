@@ -152,6 +152,7 @@ async function fetchFromTMDB(endpoint, params = {}) {
       const response = await axios.get(url, config);
       
       console.log(`✅ TMDB API success for ${endpoint} on attempt ${attempt}`);
+      console.log(`📊 Response data: ${response.data?.results?.length || 0} items returned`);
       
       // Cache successful response
       setCache(cacheKey, response.data);
@@ -173,6 +174,12 @@ async function fetchFromTMDB(endpoint, params = {}) {
 
       if (attempt === maxRetries) {
         console.log(`❌ TMDB API attempt ${attempt}/${maxRetries} failed for ${endpoint}: ${error.message}`);
+        console.log(`🔍 Error details:`, {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data,
+          code: error.code
+        });
         console.log(`🎭 Returning mock data for ${endpoint} due to API failure after ${maxRetries} attempts`);
         
         // Return mock data for critical endpoints
@@ -835,11 +842,17 @@ app.get('/api/genres/tv', async (req, res) => {
 // Get top rated movies with complete details
 app.get('/api/movies/top-rated', async (req, res) => {
   try {
+    console.log('🎬 Fetching top rated movies...');
     const cacheKey = 'top_rated_movies_complete';
     const cached = getFromCache(cacheKey);
-    if (cached) return res.json(cached);
+    if (cached) {
+      console.log('✅ Returning cached top rated movies');
+      return res.json(cached);
+    }
 
+    console.log('🌐 Fetching from TMDB API: /movie/top_rated');
     const data = await fetchFromTMDB('/movie/top_rated');
+    console.log(`✅ TMDB API returned ${data.results?.length || 0} top rated movies`);
     
     // Fetch complete details for each movie in parallel
     const moviesWithDetails = await Promise.all(
