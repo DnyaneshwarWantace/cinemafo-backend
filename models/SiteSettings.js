@@ -13,11 +13,27 @@ const siteSettingsSchema = new mongoose.Schema({
       },
       backgroundColor: {
         type: String,
-        default: '#3b82f6'
+        default: 'linear-gradient(135deg, #1e40af, #1e3a8a)'
       },
       textColor: {
         type: String,
         default: '#ffffff'
+      },
+      height: {
+        type: Number,
+        default: 48
+      },
+      textSize: {
+        type: String,
+        default: 'text-sm md:text-base'
+      },
+      textWeight: {
+        type: String,
+        default: 'font-medium'
+      },
+      textStyle: {
+        type: String,
+        default: 'normal'
       }
     },
     floatingSocialButtons: {

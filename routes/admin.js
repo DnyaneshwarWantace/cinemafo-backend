@@ -25,7 +25,11 @@ router.get('/public/settings', async (req, res) => {
       },
       content: {
         disclaimer: settings.content.disclaimer,
-        aboutUs: settings.content.aboutUs
+        aboutUs: settings.content.aboutUs,
+        socialLinks: {
+          discord: settings.appearance.floatingSocialButtons.discordUrl,
+          telegram: settings.appearance.floatingSocialButtons.telegramUrl
+        }
       },
       ads: settings.ads
     };
@@ -102,7 +106,16 @@ router.get('/settings', verifyToken, async (req, res) => {
 // Update announcement bar settings
 router.put('/settings/announcement', verifyToken, async (req, res) => {
   try {
-    const { enabled, text, backgroundColor, textColor } = req.body;
+    const { 
+      enabled, 
+      text, 
+      backgroundColor, 
+      textColor, 
+      height, 
+      textSize, 
+      textWeight, 
+      textStyle 
+    } = req.body;
     
     let settings = await SiteSettings.findOne();
     if (!settings) {
@@ -112,8 +125,12 @@ router.put('/settings/announcement', verifyToken, async (req, res) => {
     settings.appearance.announcementBar = {
       enabled: enabled || false,
       text: text || '',
-      backgroundColor: backgroundColor || '#3b82f6',
-      textColor: textColor || '#ffffff'
+      backgroundColor: backgroundColor || 'linear-gradient(135deg, #1e40af, #1e3a8a)',
+      textColor: textColor || '#ffffff',
+      height: height || 48,
+      textSize: textSize || 'text-sm md:text-base',
+      textWeight: textWeight || 'font-medium',
+      textStyle: textStyle || 'normal'
     };
     
     await settings.save();
@@ -151,7 +168,7 @@ router.put('/settings/social-buttons', verifyToken, async (req, res) => {
 // Update content settings
 router.put('/settings/content', verifyToken, async (req, res) => {
   try {
-    const { disclaimer, aboutUs } = req.body;
+    const { disclaimer, aboutUs, socialLinks } = req.body;
     
     let settings = await SiteSettings.findOne();
     if (!settings) {
@@ -163,6 +180,15 @@ router.put('/settings/content', verifyToken, async (req, res) => {
       disclaimer: disclaimer || '',
       aboutUs: aboutUs || ''
     };
+    
+    // Update social links in floatingSocialButtons if provided
+    if (socialLinks) {
+      settings.appearance.floatingSocialButtons = {
+        ...settings.appearance.floatingSocialButtons,
+        discordUrl: socialLinks.discord || '',
+        telegramUrl: socialLinks.telegram || ''
+      };
+    }
     
     await settings.save();
     res.json(settings.content);
