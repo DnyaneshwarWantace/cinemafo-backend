@@ -4,7 +4,7 @@ const SiteSettings = require('../models/SiteSettings');
 const Admin = require('../models/Admin');
 const jwt = require('jsonwebtoken');
 
-// Public endpoint to get site settings
+// Public endpoint to get site settings are changed
 router.get('/public/settings', async (req, res) => {
   try {
     console.log('Fetching public settings...');
