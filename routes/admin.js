@@ -4,7 +4,7 @@ const SiteSettings = require('../models/SiteSettings');
 const Admin = require('../models/Admin');
 const jwt = require('jsonwebtoken');
 
-// Public endpoint to get site settings are changed
+// Public endpoint to get site settings
 router.get('/public/settings', async (req, res) => {
   try {
     console.log('Fetching public settings...');
@@ -144,7 +144,7 @@ router.put('/settings/announcement', verifyToken, async (req, res) => {
 // Update floating social buttons settings
 router.put('/settings/social-buttons', verifyToken, async (req, res) => {
   try {
-    const { enabled, discordUrl, telegramUrl } = req.body;
+    const { enabled, discordEnabled, telegramEnabled, discordUrl, telegramUrl } = req.body;
     
     let settings = await SiteSettings.findOne();
     if (!settings) {
@@ -153,6 +153,8 @@ router.put('/settings/social-buttons', verifyToken, async (req, res) => {
     
     settings.appearance.floatingSocialButtons = {
       enabled: enabled || false,
+      discordEnabled: discordEnabled || false,
+      telegramEnabled: telegramEnabled || false,
       discordUrl: discordUrl || '',
       telegramUrl: telegramUrl || ''
     };
@@ -162,6 +164,30 @@ router.put('/settings/social-buttons', verifyToken, async (req, res) => {
   } catch (error) {
     console.error('Error updating social buttons settings:', error);
     res.status(500).json({ error: 'Failed to update social buttons settings' });
+  }
+});
+
+// Update social links settings
+router.put('/settings/social-links', verifyToken, async (req, res) => {
+  try {
+    const { discord, telegram } = req.body;
+    
+    let settings = await SiteSettings.findOne();
+    if (!settings) {
+      settings = new SiteSettings();
+    }
+    
+    // Update social links in content
+    settings.content.socialLinks = {
+      discord: discord || '',
+      telegram: telegram || ''
+    };
+    
+    await settings.save();
+    res.json(settings.content.socialLinks);
+  } catch (error) {
+    console.error('Error updating social links settings:', error);
+    res.status(500).json({ error: 'Failed to update social links settings' });
   }
 });
 

@@ -39,7 +39,15 @@ const siteSettingsSchema = new mongoose.Schema({
     floatingSocialButtons: {
       enabled: {
         type: Boolean,
-        default: true
+        default: false
+      },
+      discordEnabled: {
+        type: Boolean,
+        default: false
+      },
+      telegramEnabled: {
+        type: Boolean,
+        default: false
       },
       discordUrl: {
         type: String,

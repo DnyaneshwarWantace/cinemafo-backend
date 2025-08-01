@@ -59,10 +59,25 @@ const setCache = (key, data) => {
 
 // Rate limiting: track last request time
 let lastRequestTime = 0;
-const REQUEST_DELAY = 500; // 500ms delay between requests to avoid rate limiting
+const REQUEST_DELAY = 100; // 100ms delay between requests (allows ~30 requests per second with 3 API keys)
 
-// TMDB Configuration
-const TMDB_API_KEY = process.env.TMDB_API_KEY || '8265bd1679663a7ea12ac168da84d2e8';
+// TMDB Configuration with API Key Rotation
+const TMDB_API_KEYS = process.env.TMDB_API_KEYS 
+  ? process.env.TMDB_API_KEYS.split(',').map(key => key.trim())
+  : [];
+
+let currentApiKeyIndex = 0;
+
+const getNextApiKey = () => {
+  if (TMDB_API_KEYS.length === 0) {
+    throw new Error('No TMDB API keys configured. Please set TMDB_API_KEYS in your .env file');
+  }
+  const key = TMDB_API_KEYS[currentApiKeyIndex];
+  console.log(`🔑 Using API key ${currentApiKeyIndex + 1}/${TMDB_API_KEYS.length} (${key.substring(0, 8)}...)`);
+  currentApiKeyIndex = (currentApiKeyIndex + 1) % TMDB_API_KEYS.length;
+  return key;
+};
+
 const TMDB_BASE_URL = process.env.TMDB_BASE_URL || 'https://api.themoviedb.org/3';
 const VIDSRC_BASE_URL = process.env.VIDSRC_BASE_URL || 'https://vidsrc.xyz/embed';
 
@@ -113,7 +128,7 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Enhanced TMDB API call with caching and retry logic
+// Enhanced TMDB API call with caching, retry logic, and API key rotation
 async function fetchFromTMDB(endpoint, params = {}) {
   const cacheKey = getCacheKey(endpoint, params);
   
@@ -126,7 +141,7 @@ async function fetchFromTMDB(endpoint, params = {}) {
   const url = `${TMDB_BASE_URL}${endpoint}`;
   const config = {
     params: {
-      api_key: TMDB_API_KEY,
+      api_key: getNextApiKey(), // Use rotating API key
       language: 'en-US',
       ...params
     },
@@ -147,6 +162,11 @@ async function fetchFromTMDB(endpoint, params = {}) {
       }
 
       lastRequestTime = Date.now();
+      
+      // Use different API key for each retry attempt
+      if (attempt > 1) {
+        config.params.api_key = getNextApiKey();
+      }
       
       console.log(`🎬 TMDB API attempt ${attempt}/${maxRetries} for ${endpoint}`);
       const response = await axios.get(url, config);
@@ -305,22 +325,40 @@ const getMockUpcomingMovies = () => {
   };
 };
 
-// Import admin routes
+// Import routes
 const adminRoutes = require('./routes/admin');
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    apiKeys: {
+      total: TMDB_API_KEYS.length,
+      currentIndex: currentApiKeyIndex,
+      rotationEnabled: TMDB_API_KEYS.length > 0,
+      configured: TMDB_API_KEYS.length > 0
+    }
+  });
 });
 
 // Admin routes
 app.use('/api/admin', adminRoutes);
 
-// Test TMDB connectivity
+// Test TMDB connectivity with API key rotation
 app.get('/api/test-tmdb', async (req, res) => {
   try {
+    if (TMDB_API_KEYS.length === 0) {
+      return res.json({ 
+        status: 'error', 
+        message: 'No TMDB API keys configured',
+        error: 'Please set TMDB_API_KEYS in your .env file',
+        apiKeysCount: 0
+      });
+    }
+
     const response = await axios.get(`${TMDB_BASE_URL}/configuration`, {
-      params: { api_key: TMDB_API_KEY },
+      params: { api_key: getNextApiKey() },
       timeout: 5000,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
@@ -328,15 +366,17 @@ app.get('/api/test-tmdb', async (req, res) => {
     });
     res.json({ 
       status: 'success', 
-      message: 'TMDB API is accessible',
-      data: response.data 
+      message: 'TMDB API is accessible with rotating keys',
+      data: response.data,
+      apiKeysCount: TMDB_API_KEYS.length
     });
   } catch (error) {
     res.json({ 
       status: 'error', 
       message: 'TMDB API is not accessible',
       error: error.message,
-      code: error.code 
+      code: error.code,
+      apiKeysCount: TMDB_API_KEYS.length
     });
   }
 });
@@ -352,21 +392,19 @@ app.get('/api/movies/trending', async (req, res) => {
 
     const data = await fetchFromTMDB('/trending/movie/day');
     
-    // Fetch complete details for each movie in parallel
+    // Fetch complete details for each movie using append_to_response (single API call per movie)
     const moviesWithDetails = await Promise.all(
       data.results.slice(0, 20).map(async (movie) => {
         try {
-          const [movieDetails, credits, keywords] = await Promise.all([
-            fetchFromTMDB(`/movie/${movie.id}`),
-            fetchFromTMDB(`/movie/${movie.id}/credits`),
-            fetchFromTMDB(`/movie/${movie.id}/keywords`)
-          ]);
+          const movieDetails = await fetchFromTMDB(`/movie/${movie.id}`, {
+            append_to_response: 'credits,keywords'
+          });
 
           return {
             ...movieDetails,
-            cast: credits.cast?.slice(0, 10) || [],
-            crew: credits.crew || [],
-            keywords: keywords.keywords || []
+            cast: movieDetails.credits?.cast?.slice(0, 10) || [],
+            crew: movieDetails.credits?.crew || [],
+            keywords: movieDetails.keywords?.keywords || []
           };
         } catch (error) {
           console.error(`Error fetching details for movie ${movie.id}:`, error.message);
@@ -397,21 +435,19 @@ app.get('/api/movies/popular', async (req, res) => {
 
     const data = await fetchFromTMDB('/movie/popular');
     
-    // Fetch complete details for each movie in parallel
+    // Fetch complete details for each movie using append_to_response (single API call per movie)
     const moviesWithDetails = await Promise.all(
       data.results.slice(0, 20).map(async (movie) => {
         try {
-          const [movieDetails, credits, keywords] = await Promise.all([
-            fetchFromTMDB(`/movie/${movie.id}`),
-            fetchFromTMDB(`/movie/${movie.id}/credits`),
-            fetchFromTMDB(`/movie/${movie.id}/keywords`)
-          ]);
+          const movieDetails = await fetchFromTMDB(`/movie/${movie.id}`, {
+            append_to_response: 'credits,keywords'
+          });
 
           return {
             ...movieDetails,
-            cast: credits.cast?.slice(0, 10) || [],
-            crew: credits.crew || [],
-            keywords: keywords.keywords || []
+            cast: movieDetails.credits?.cast?.slice(0, 10) || [],
+            crew: movieDetails.credits?.crew || [],
+            keywords: movieDetails.keywords?.keywords || []
           };
         } catch (error) {
           console.error(`Error fetching details for movie ${movie.id}:`, error.message);
@@ -441,19 +477,17 @@ app.get('/api/movies/:id', async (req, res) => {
     const cached = getFromCache(cacheKey);
     if (cached) return res.json(cached);
 
-    // Fetch movie details, credits, and keywords in parallel
-    const [movieDetails, credits, keywords] = await Promise.all([
-      fetchFromTMDB(`/movie/${id}`),
-      fetchFromTMDB(`/movie/${id}/credits`),
-      fetchFromTMDB(`/movie/${id}/keywords`)
-    ]);
+    // Fetch movie details with credits and keywords in a single API call
+    const movieDetails = await fetchFromTMDB(`/movie/${id}`, {
+      append_to_response: 'credits,keywords'
+    });
 
     // Combine all data
     const completeMovieData = {
       ...movieDetails,
-      cast: credits.cast,
-      crew: credits.crew,
-      keywords: keywords.keywords
+      cast: movieDetails.credits?.cast || [],
+      crew: movieDetails.credits?.crew || [],
+      keywords: movieDetails.keywords?.keywords || []
     };
 
     setCache(cacheKey, completeMovieData);
@@ -474,21 +508,19 @@ app.get('/api/movies/genre/:genreId', async (req, res) => {
 
     const data = await fetchFromTMDB('/discover/movie', { with_genres: genreId });
     
-    // Fetch complete details for each movie in parallel
+    // Fetch complete details for each movie using append_to_response (single API call per movie)
     const moviesWithDetails = await Promise.all(
       data.results.slice(0, 20).map(async (movie) => {
         try {
-          const [movieDetails, credits, keywords] = await Promise.all([
-            fetchFromTMDB(`/movie/${movie.id}`),
-            fetchFromTMDB(`/movie/${movie.id}/credits`),
-            fetchFromTMDB(`/movie/${movie.id}/keywords`)
-          ]);
+          const movieDetails = await fetchFromTMDB(`/movie/${movie.id}`, {
+            append_to_response: 'credits,keywords'
+          });
 
           return {
             ...movieDetails,
-            cast: credits.cast?.slice(0, 10) || [],
-            crew: credits.crew || [],
-            keywords: keywords.keywords || []
+            cast: movieDetails.credits?.cast?.slice(0, 10) || [],
+            crew: movieDetails.credits?.crew || [],
+            keywords: movieDetails.keywords?.keywords || []
           };
         } catch (error) {
           console.error(`Error fetching details for movie ${movie.id}:`, error.message);
@@ -519,21 +551,19 @@ app.get('/api/tv/trending', async (req, res) => {
 
     const data = await fetchFromTMDB('/trending/tv/day');
     
-    // Fetch complete details for each show in parallel
+    // Fetch complete details for each show using append_to_response (single API call per show)
     const showsWithDetails = await Promise.all(
       data.results.slice(0, 20).map(async (show) => {
         try {
-          const [showDetails, credits, keywords] = await Promise.all([
-            fetchFromTMDB(`/tv/${show.id}`),
-            fetchFromTMDB(`/tv/${show.id}/credits`),
-            fetchFromTMDB(`/tv/${show.id}/keywords`)
-          ]);
+          const showDetails = await fetchFromTMDB(`/tv/${show.id}`, {
+            append_to_response: 'credits,keywords'
+          });
 
           return {
             ...showDetails,
-            cast: credits.cast?.slice(0, 10) || [],
-            crew: credits.crew || [],
-            keywords: keywords.results || []
+            cast: showDetails.credits?.cast?.slice(0, 10) || [],
+            crew: showDetails.credits?.crew || [],
+            keywords: showDetails.keywords?.results || []
           };
         } catch (error) {
           console.error(`Error fetching details for TV show ${show.id}:`, error.message);
@@ -564,21 +594,19 @@ app.get('/api/tv/popular', async (req, res) => {
 
     const data = await fetchFromTMDB('/tv/popular');
     
-    // Fetch complete details for each show in parallel
+    // Fetch complete details for each show using append_to_response (single API call per show)
     const showsWithDetails = await Promise.all(
       data.results.slice(0, 20).map(async (show) => {
         try {
-          const [showDetails, credits, keywords] = await Promise.all([
-            fetchFromTMDB(`/tv/${show.id}`),
-            fetchFromTMDB(`/tv/${show.id}/credits`),
-            fetchFromTMDB(`/tv/${show.id}/keywords`)
-          ]);
+          const showDetails = await fetchFromTMDB(`/tv/${show.id}`, {
+            append_to_response: 'credits,keywords'
+          });
 
           return {
             ...showDetails,
-            cast: credits.cast?.slice(0, 10) || [],
-            crew: credits.crew || [],
-            keywords: keywords.results || []
+            cast: showDetails.credits?.cast?.slice(0, 10) || [],
+            crew: showDetails.credits?.crew || [],
+            keywords: showDetails.keywords?.results || []
           };
         } catch (error) {
           console.error(`Error fetching details for TV show ${show.id}:`, error.message);
@@ -609,21 +637,19 @@ app.get('/api/tv/top-rated', async (req, res) => {
 
     const data = await fetchFromTMDB('/tv/top_rated');
     
-    // Fetch complete details for each show in parallel
+    // Fetch complete details for each show using append_to_response (single API call per show)
     const showsWithDetails = await Promise.all(
       data.results.slice(0, 20).map(async (show) => {
         try {
-          const [showDetails, credits, keywords] = await Promise.all([
-            fetchFromTMDB(`/tv/${show.id}`),
-            fetchFromTMDB(`/tv/${show.id}/credits`),
-            fetchFromTMDB(`/tv/${show.id}/keywords`)
-          ]);
+          const showDetails = await fetchFromTMDB(`/tv/${show.id}`, {
+            append_to_response: 'credits,keywords'
+          });
 
           return {
             ...showDetails,
-            cast: credits.cast?.slice(0, 10) || [],
-            crew: credits.crew || [],
-            keywords: keywords.results || []
+            cast: showDetails.credits?.cast?.slice(0, 10) || [],
+            crew: showDetails.credits?.crew || [],
+            keywords: showDetails.keywords?.results || []
           };
         } catch (error) {
           console.error(`Error fetching details for TV show ${show.id}:`, error.message);
@@ -655,21 +681,19 @@ app.get('/api/tv/genre/:genreId', async (req, res) => {
 
     const data = await fetchFromTMDB('/discover/tv', { with_genres: genreId });
     
-    // Fetch complete details for each show in parallel
+    // Fetch complete details for each show using append_to_response (single API call per show)
     const showsWithDetails = await Promise.all(
       data.results.slice(0, 20).map(async (show) => {
         try {
-          const [showDetails, credits, keywords] = await Promise.all([
-            fetchFromTMDB(`/tv/${show.id}`),
-            fetchFromTMDB(`/tv/${show.id}/credits`),
-            fetchFromTMDB(`/tv/${show.id}/keywords`)
-          ]);
+          const showDetails = await fetchFromTMDB(`/tv/${show.id}`, {
+            append_to_response: 'credits,keywords'
+          });
 
           return {
             ...showDetails,
-            cast: credits.cast?.slice(0, 10) || [],
-            crew: credits.crew || [],
-            keywords: keywords.results || []
+            cast: showDetails.credits?.cast?.slice(0, 10) || [],
+            crew: showDetails.credits?.crew || [],
+            keywords: showDetails.keywords?.results || []
           };
         } catch (error) {
           console.error(`Error fetching details for TV show ${show.id}:`, error.message);
@@ -699,21 +723,17 @@ app.get('/api/tv/:id', async (req, res) => {
     const cached = getFromCache(cacheKey);
     if (cached) return res.json(cached);
 
-    // Fetch TV show details, credits, and keywords in parallel
-    const [showDetails, credits, keywords] = await Promise.all([
-      fetchFromTMDB(`/tv/${id}`, {
-        append_to_response: 'videos,similar,recommendations'
-      }),
-      fetchFromTMDB(`/tv/${id}/credits`),
-      fetchFromTMDB(`/tv/${id}/keywords`)
-    ]);
+    // Fetch TV show details with credits and keywords in a single API call
+    const showDetails = await fetchFromTMDB(`/tv/${id}`, {
+      append_to_response: 'videos,similar,recommendations,credits,keywords'
+    });
 
     // Combine all data
     const completeShowData = {
       ...showDetails,
-      cast: credits.cast?.slice(0, 15) || [],
-      crew: credits.crew || [],
-      keywords: keywords.results || []
+      cast: showDetails.credits?.cast?.slice(0, 15) || [],
+      crew: showDetails.credits?.crew || [],
+      keywords: showDetails.keywords?.results || []
     };
 
     setCache(cacheKey, completeShowData);
@@ -768,18 +788,16 @@ app.get('/api/search', async (req, res) => {
         // Only fetch detailed data for movies
         if (item.media_type === 'movie') {
           try {
-            const [movieDetails, credits, keywords] = await Promise.all([
-              fetchFromTMDB(`/movie/${item.id}`),
-              fetchFromTMDB(`/movie/${item.id}/credits`),
-              fetchFromTMDB(`/movie/${item.id}/keywords`)
-            ]);
+            const movieDetails = await fetchFromTMDB(`/movie/${item.id}`, {
+              append_to_response: 'credits,keywords'
+            });
 
             return {
               ...movieDetails,
               media_type: 'movie',
-              cast: credits.cast?.slice(0, 10) || [],
-              crew: credits.crew || [],
-              keywords: keywords.keywords || []
+              cast: movieDetails.credits?.cast?.slice(0, 10) || [],
+              crew: movieDetails.credits?.crew || [],
+              keywords: movieDetails.keywords?.keywords || []
             };
           } catch (error) {
             console.error(`Error fetching details for movie ${item.id}:`, error.message);
@@ -854,21 +872,19 @@ app.get('/api/movies/top-rated', async (req, res) => {
     const data = await fetchFromTMDB('/movie/top_rated');
     console.log(`✅ TMDB API returned ${data.results?.length || 0} top rated movies`);
     
-    // Fetch complete details for each movie in parallel
+    // Fetch complete details for each movie using append_to_response (single API call per movie)
     const moviesWithDetails = await Promise.all(
       data.results.slice(0, 20).map(async (movie) => {
         try {
-          const [movieDetails, credits, keywords] = await Promise.all([
-            fetchFromTMDB(`/movie/${movie.id}`),
-            fetchFromTMDB(`/movie/${movie.id}/credits`),
-            fetchFromTMDB(`/movie/${movie.id}/keywords`)
-          ]);
+          const movieDetails = await fetchFromTMDB(`/movie/${movie.id}`, {
+            append_to_response: 'credits,keywords'
+          });
 
           return {
             ...movieDetails,
-            cast: credits.cast?.slice(0, 10) || [],
-            crew: credits.crew || [],
-            keywords: keywords.keywords || []
+            cast: movieDetails.credits?.cast?.slice(0, 10) || [],
+            crew: movieDetails.credits?.crew || [],
+            keywords: movieDetails.keywords?.keywords || []
           };
         } catch (error) {
           console.error(`Error fetching details for movie ${movie.id}:`, error.message);
@@ -899,21 +915,19 @@ app.get('/api/movies/upcoming', async (req, res) => {
 
     const data = await fetchFromTMDB('/movie/upcoming');
     
-    // Fetch complete details for each movie in parallel (up to 50 movies)
+    // Fetch complete details for each movie using append_to_response (single API call per movie)
     const moviesWithDetails = await Promise.all(
-      data.results.slice(0, 50).map(async (movie) => {
+      data.results.slice(0, 20).map(async (movie) => {
         try {
-          const [movieDetails, credits, keywords] = await Promise.all([
-            fetchFromTMDB(`/movie/${movie.id}`),
-            fetchFromTMDB(`/movie/${movie.id}/credits`),
-            fetchFromTMDB(`/movie/${movie.id}/keywords`)
-          ]);
+          const movieDetails = await fetchFromTMDB(`/movie/${movie.id}`, {
+            append_to_response: 'credits,keywords'
+          });
 
           return {
             ...movieDetails,
-            cast: credits.cast?.slice(0, 10) || [],
-            crew: credits.crew || [],
-            keywords: keywords.keywords || []
+            cast: movieDetails.credits?.cast?.slice(0, 10) || [],
+            crew: movieDetails.credits?.crew || [],
+            keywords: movieDetails.keywords?.keywords || []
           };
         } catch (error) {
           console.error(`Error fetching details for movie ${movie.id}:`, error.message);
@@ -944,21 +958,19 @@ app.get('/api/movies/now-playing', async (req, res) => {
 
     const data = await fetchFromTMDB('/movie/now_playing');
     
-    // Fetch complete details for each movie in parallel
+    // Fetch complete details for each movie using append_to_response (single API call per movie)
     const moviesWithDetails = await Promise.all(
       data.results.slice(0, 20).map(async (movie) => {
         try {
-          const [movieDetails, credits, keywords] = await Promise.all([
-            fetchFromTMDB(`/movie/${movie.id}`),
-            fetchFromTMDB(`/movie/${movie.id}/credits`),
-            fetchFromTMDB(`/movie/${movie.id}/keywords`)
-          ]);
+          const movieDetails = await fetchFromTMDB(`/movie/${movie.id}`, {
+            append_to_response: 'credits,keywords'
+          });
 
           return {
             ...movieDetails,
-            cast: credits.cast?.slice(0, 10) || [],
-            crew: credits.crew || [],
-            keywords: keywords.keywords || []
+            cast: movieDetails.credits?.cast?.slice(0, 10) || [],
+            crew: movieDetails.credits?.crew || [],
+            keywords: movieDetails.keywords?.keywords || []
           };
         } catch (error) {
           console.error(`Error fetching details for movie ${movie.id}:`, error.message);
@@ -1134,21 +1146,19 @@ app.get('/api/tv/web-series', async (req, res) => {
     // Get popular TV shows and filter for web series characteristics
     const data = await fetchFromTMDB('/tv/popular');
     
-    // Fetch complete details for each show in parallel
+    // Fetch complete details for each show using append_to_response (single API call per show)
     const showsWithDetails = await Promise.all(
       data.results.slice(0, 30).map(async (show) => {
         try {
-          const [showDetails, credits, keywords] = await Promise.all([
-            fetchFromTMDB(`/tv/${show.id}`),
-            fetchFromTMDB(`/tv/${show.id}/credits`),
-            fetchFromTMDB(`/tv/${show.id}/keywords`)
-          ]);
+          const showDetails = await fetchFromTMDB(`/tv/${show.id}`, {
+            append_to_response: 'credits,keywords'
+          });
 
           return {
             ...showDetails,
-            cast: credits.cast?.slice(0, 10) || [],
-            crew: credits.crew || [],
-            keywords: keywords.results || []
+            cast: showDetails.credits?.cast?.slice(0, 10) || [],
+            crew: showDetails.credits?.crew || [],
+            keywords: showDetails.keywords?.results || []
           };
         } catch (error) {
           console.error(`Error fetching details for TV show ${show.id}:`, error.message);
@@ -1183,21 +1193,19 @@ app.get('/api/tv/crime-dramas', async (req, res) => {
       sort_by: 'popularity.desc'
     });
     
-    // Fetch complete details for each show in parallel
+    // Fetch complete details for each show using append_to_response (single API call per show)
     const showsWithDetails = await Promise.all(
       data.results.slice(0, 25).map(async (show) => {
         try {
-          const [showDetails, credits, keywords] = await Promise.all([
-            fetchFromTMDB(`/tv/${show.id}`),
-            fetchFromTMDB(`/tv/${show.id}/credits`),
-            fetchFromTMDB(`/tv/${show.id}/keywords`)
-          ]);
+          const showDetails = await fetchFromTMDB(`/tv/${show.id}`, {
+            append_to_response: 'credits,keywords'
+          });
 
           return {
             ...showDetails,
-            cast: credits.cast?.slice(0, 10) || [],
-            crew: credits.crew || [],
-            keywords: keywords.results || []
+            cast: showDetails.credits?.cast?.slice(0, 10) || [],
+            crew: showDetails.credits?.crew || [],
+            keywords: showDetails.keywords?.results || []
           };
         } catch (error) {
           console.error(`Error fetching details for TV show ${show.id}:`, error.message);
@@ -1232,21 +1240,19 @@ app.get('/api/tv/sci-fi-fantasy', async (req, res) => {
       sort_by: 'popularity.desc'
     });
     
-    // Fetch complete details for each show in parallel
+    // Fetch complete details for each show using append_to_response (single API call per show)
     const showsWithDetails = await Promise.all(
       data.results.slice(0, 25).map(async (show) => {
         try {
-          const [showDetails, credits, keywords] = await Promise.all([
-            fetchFromTMDB(`/tv/${show.id}`),
-            fetchFromTMDB(`/tv/${show.id}/credits`),
-            fetchFromTMDB(`/tv/${show.id}/keywords`)
-          ]);
+          const showDetails = await fetchFromTMDB(`/tv/${show.id}`, {
+            append_to_response: 'credits,keywords'
+          });
 
           return {
             ...showDetails,
-            cast: credits.cast?.slice(0, 10) || [],
-            crew: credits.crew || [],
-            keywords: keywords.results || []
+            cast: showDetails.credits?.cast?.slice(0, 10) || [],
+            crew: showDetails.credits?.crew || [],
+            keywords: showDetails.keywords?.results || []
           };
         } catch (error) {
           console.error(`Error fetching details for TV show ${show.id}:`, error.message);
@@ -1281,21 +1287,19 @@ app.get('/api/tv/comedy-series', async (req, res) => {
       sort_by: 'popularity.desc'
     });
     
-    // Fetch complete details for each show in parallel
+    // Fetch complete details for each show using append_to_response (single API call per show)
     const showsWithDetails = await Promise.all(
       data.results.slice(0, 25).map(async (show) => {
         try {
-          const [showDetails, credits, keywords] = await Promise.all([
-            fetchFromTMDB(`/tv/${show.id}`),
-            fetchFromTMDB(`/tv/${show.id}/credits`),
-            fetchFromTMDB(`/tv/${show.id}/keywords`)
-          ]);
+          const showDetails = await fetchFromTMDB(`/tv/${show.id}`, {
+            append_to_response: 'credits,keywords'
+          });
 
           return {
             ...showDetails,
-            cast: credits.cast?.slice(0, 10) || [],
-            crew: credits.crew || [],
-            keywords: keywords.results || []
+            cast: showDetails.credits?.cast?.slice(0, 10) || [],
+            crew: showDetails.credits?.crew || [],
+            keywords: showDetails.keywords?.results || []
           };
         } catch (error) {
           console.error(`Error fetching details for TV show ${show.id}:`, error.message);
@@ -1330,5 +1334,9 @@ app.use((err, req, res, next) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🎬 Cinema Nexus Backend running on port ${PORT}`);
   console.log(`🔗 Health check: ${BACKEND_URL}/health`);
+  console.log(`🔑 API Keys: ${TMDB_API_KEYS.length} keys configured for rotation`);
+  if (TMDB_API_KEYS.length === 0) {
+    console.log('⚠️  Warning: No API keys configured. Please set TMDB_API_KEYS in your .env file');
+  }
   console.log('🚀 Backend ready to serve requests!');
 }); 
