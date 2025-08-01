@@ -26,9 +26,9 @@ router.get('/public/settings', async (req, res) => {
       content: {
         disclaimer: settings.content.disclaimer,
         aboutUs: settings.content.aboutUs,
-        socialLinks: {
-          discord: settings.appearance.floatingSocialButtons.discordUrl,
-          telegram: settings.appearance.floatingSocialButtons.telegramUrl
+        socialLinks: settings.content.socialLinks || {
+          discord: 'https://discord.gg/cinema-fo',
+          telegram: 'https://t.me/cinema-fo'
         }
       },
       ads: settings.ads
