@@ -84,6 +84,11 @@ const siteSettingsSchema = new mongoose.Schema({
     }
   },
   ads: {
+    heroOverlayAd: {
+      enabled: { type: Boolean, default: false },
+      imageUrl: { type: String, default: '' },
+      clickUrl: { type: String, default: '' }
+    },
     mainPageAd1: {
       enabled: { type: Boolean, default: false },
       imageUrl: { type: String, default: '' },
