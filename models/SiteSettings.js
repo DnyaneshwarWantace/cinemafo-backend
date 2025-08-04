@@ -87,61 +87,73 @@ const siteSettingsSchema = new mongoose.Schema({
     heroOverlayAd: {
       enabled: { type: Boolean, default: false },
       imageUrl: { type: String, default: '' },
+      cloudinaryUrl: { type: String, default: '' },
       clickUrl: { type: String, default: '' }
     },
     mainPageAd1: {
       enabled: { type: Boolean, default: false },
       imageUrl: { type: String, default: '' },
+      cloudinaryUrl: { type: String, default: '' },
       clickUrl: { type: String, default: '' }
     },
     mainPageAd2: {
       enabled: { type: Boolean, default: false },
       imageUrl: { type: String, default: '' },
+      cloudinaryUrl: { type: String, default: '' },
       clickUrl: { type: String, default: '' }
     },
     mainPageAd3: {
       enabled: { type: Boolean, default: false },
       imageUrl: { type: String, default: '' },
+      cloudinaryUrl: { type: String, default: '' },
       clickUrl: { type: String, default: '' }
     },
     mainPageAd4: {
       enabled: { type: Boolean, default: false },
       imageUrl: { type: String, default: '' },
+      cloudinaryUrl: { type: String, default: '' },
       clickUrl: { type: String, default: '' }
     },
     searchTopAd: {
       enabled: { type: Boolean, default: false },
       imageUrl: { type: String, default: '' },
+      cloudinaryUrl: { type: String, default: '' },
       clickUrl: { type: String, default: '' }
     },
     searchBottomAd: {
       enabled: { type: Boolean, default: false },
       imageUrl: { type: String, default: '' },
+      cloudinaryUrl: { type: String, default: '' },
       clickUrl: { type: String, default: '' }
     },
     moviesPageAd: {
       enabled: { type: Boolean, default: false },
       imageUrl: { type: String, default: '' },
+      cloudinaryUrl: { type: String, default: '' },
       clickUrl: { type: String, default: '' }
     },
     moviesPageBottomAd: {
       enabled: { type: Boolean, default: false },
       imageUrl: { type: String, default: '' },
+      cloudinaryUrl: { type: String, default: '' },
       clickUrl: { type: String, default: '' }
     },
     showsPageAd: {
       enabled: { type: Boolean, default: false },
       imageUrl: { type: String, default: '' },
+      cloudinaryUrl: { type: String, default: '' },
       clickUrl: { type: String, default: '' }
     },
     showsPageBottomAd: {
       enabled: { type: Boolean, default: false },
       imageUrl: { type: String, default: '' },
+      cloudinaryUrl: { type: String, default: '' },
       clickUrl: { type: String, default: '' }
     },
     playerPageAd: {
       enabled: { type: Boolean, default: false },
       imageUrl: { type: String, default: '' },
+      cloudinaryUrl: { type: String, default: '' },
       clickUrl: { type: String, default: '' }
     }
   }
