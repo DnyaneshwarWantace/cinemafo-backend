@@ -1,14 +1,14 @@
 # 🚀 Top Rated Endpoints Fix
 
 ## Problem Identified
-The top-rated movies and TV shows endpoints were failing while other endpoints worked fine because:
+The top_rated movies and TV shows endpoints were failing while other endpoints worked fine because:
 
-1. **Top-rated movies was using sequential processing** (slow and prone to rate limiting)
+1. **top_rated movies was using sequential processing** (slow and prone to rate limiting)
 2. **Other endpoints use parallel processing** (faster and more efficient)
 3. **Too many API calls** (20 movies/shows = 21 total API calls)
 
 ## Root Cause
-The top-rated movies endpoint was using a `for` loop with delays:
+The top_rated movies endpoint was using a `for` loop with delays:
 ```javascript
 // WRONG: Sequential processing (slow)
 for (let i = 0; i < moviesToFetch.length; i++) {
@@ -33,7 +33,7 @@ const moviesWithDetails = await Promise.all(
 ```
 
 ## Fix Applied
-1. **Changed top-rated movies to parallel processing** (like other endpoints)
+1. **Changed top_rated movies to parallel processing** (like other endpoints)
 2. **Reduced from 20 to 15 movies/shows** (fewer API calls)
 3. **Removed sequential delays** (not needed with parallel processing)
 
@@ -49,7 +49,7 @@ const moviesWithDetails = await Promise.all(
 - **Consistent approach**: Same pattern as working endpoints
 
 ## Result
-- ✅ Top-rated movies now works like other endpoints
-- ✅ Top-rated TV shows already worked (was using correct pattern)
+- ✅ top_rated movies now works like other endpoints
+- ✅ top_rated TV shows already worked (was using correct pattern)
 - ✅ No more rate limiting issues
 - ✅ Faster loading times 

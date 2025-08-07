@@ -629,13 +629,19 @@ app.get('/api/tv/popular', async (req, res) => {
 });
 
 // Get top rated TV shows with complete details
-app.get('/api/tv/top-rated', async (req, res) => {
+app.get('/api/tv/top_rated', async (req, res) => {
   try {
+    console.log('📺 Fetching top rated TV shows...');
     const cacheKey = 'top_rated_tv_complete';
     const cached = getFromCache(cacheKey);
-    if (cached) return res.json(cached);
+    if (cached) {
+      console.log('✅ Returning cached top rated TV shows');
+      return res.json(cached);
+    }
 
+    console.log('🌐 Fetching from TMDB API: /tv/top_rated');
     const data = await fetchFromTMDB('/tv/top_rated');
+    console.log(`✅ TMDB API returned ${data.results?.length || 0} top rated TV shows`);
     
     // Fetch complete details for each show using append_to_response (single API call per show)
     const showsWithDetails = await Promise.all(
@@ -858,7 +864,7 @@ app.get('/api/genres/tv', async (req, res) => {
 });
 
 // Get top rated movies with complete details
-app.get('/api/movies/top-rated', async (req, res) => {
+app.get('/api/movies/top_rated', async (req, res) => {
   try {
     console.log('🎬 Fetching top rated movies...');
     const cacheKey = 'top_rated_movies_complete';
@@ -950,7 +956,7 @@ app.get('/api/movies/upcoming', async (req, res) => {
 });
 
 // Get now playing movies with complete details
-app.get('/api/movies/now-playing', async (req, res) => {
+app.get('/api/movies/now_playing', async (req, res) => {
   try {
     const cacheKey = 'now_playing_movies_complete';
     const cached = getFromCache(cacheKey);

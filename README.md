@@ -44,7 +44,7 @@ npm start
 
 ### Movies
 - `GET /api/movies/trending` - Get trending movies
-- `GET /api/movies/top-rated` - Get top rated movies
+- `GET /api/movies/top_rated` - Get top rated movies
 - `GET /api/movies/:id` - Get movie details with videos, credits, etc.
 - `GET /api/search/movies?query=search_term` - Search movies
 - `GET /api/genres/movies` - Get movie genres list

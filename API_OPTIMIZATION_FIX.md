@@ -1,7 +1,7 @@
 # 🚀 API Optimization Fix - Top Rated Movies
 
 ## Problem Identified
-The `/api/movies/top-rated` endpoint was still making **21 API calls**:
+The `/api/movies/top_rated` endpoint was still making **21 API calls**:
 - 1 call to get the basic list
 - 20 individual calls for movie details
 
@@ -50,8 +50,8 @@ for (let i = 0; i < moviesToFetch.length; i++) {
 ```
 
 ## Performance Improvement
-- **Before**: 21 API calls per top-rated movies request (20 parallel)
-- **After**: 11 API calls per top-rated movies request (10 sequential with delays)
+- **Before**: 21 API calls per top_rated movies request (20 parallel)
+- **After**: 11 API calls per top_rated movies request (10 sequential with delays)
 - **Improvement**: 48% reduction in API calls + rate limiting protection for this endpoint
 
 ## Complete Optimization Status

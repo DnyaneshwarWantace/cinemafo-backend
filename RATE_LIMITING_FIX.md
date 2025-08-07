@@ -25,7 +25,7 @@ const REQUEST_DELAY = 100; // ~30 requests/second with 3 API keys
 
 ### 2. Sequential Rate Limiting Optimization
 ```javascript
-// BEFORE: 300ms delay between top-rated movie requests
+// BEFORE: 300ms delay between top_rated movie requests
 await new Promise(resolve => setTimeout(resolve, 300));
 
 // AFTER: 150ms delay (reduced due to better global limiting)
