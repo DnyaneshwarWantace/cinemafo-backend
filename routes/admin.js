@@ -66,6 +66,16 @@ const verifyToken = async (req, res, next) => {
     next();
   } catch (error) {
     console.error('Token verification error:', error);
+    
+    // Check if token is expired specifically
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ 
+        error: 'Token expired', 
+        expired: true,
+        expiredAt: error.expiredAt 
+      });
+    }
+    
     res.status(401).json({ error: 'Invalid token' });
   }
 };
@@ -89,13 +99,62 @@ router.post('/login', async (req, res) => {
     const token = jwt.sign(
       { adminId: admin._id },
       process.env.JWT_SECRET || 'your-secret-key',
-      { expiresIn: '24h' }
+      { expiresIn: '7d' }
     );
 
     res.json({ token });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// Token refresh endpoint
+router.post('/refresh-token', async (req, res) => {
+  try {
+    const { token } = req.body;
+    
+    if (!token) {
+      return res.status(400).json({ error: 'Token is required' });
+    }
+
+    // Verify the token (even if expired) to get the admin ID
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+    } catch (error) {
+      // If token is expired, try to decode it without verification
+      if (error.name === 'TokenExpiredError') {
+        decoded = jwt.decode(token);
+      } else {
+        return res.status(401).json({ error: 'Invalid token' });
+      }
+    }
+
+    if (!decoded || !decoded.adminId) {
+      return res.status(401).json({ error: 'Invalid token payload' });
+    }
+
+    // Verify admin still exists
+    const admin = await Admin.findById(decoded.adminId);
+    if (!admin) {
+      return res.status(401).json({ error: 'Admin not found' });
+    }
+
+    // Create new token
+    const newToken = jwt.sign(
+      { adminId: admin._id },
+      process.env.JWT_SECRET || 'your-secret-key',
+      { expiresIn: '7d' }
+    );
+
+    res.json({ 
+      token: newToken,
+      message: 'Token refreshed successfully'
+    });
+  } catch (error) {
+    console.error('Token refresh error:', error);
+    res.status(500).json({ error: 'Token refresh failed' });
   }
 });
 
@@ -270,13 +329,13 @@ router.put('/settings/ads', verifyToken, async (req, res) => {
     
     await settings.save();
     
-    // Start background uploads to Cloudinary for new images
-    if (adsToUpload.length > 0) {
-      console.log(`Starting background Cloudinary upload for ${adsToUpload.length} ads`);
-      adsToUpload.forEach(({ adKey, imageUrl }) => {
-        uploadImageToCloudinary(adKey, imageUrl, settings._id);
-      });
-    }
+            // Start background uploads to Tenor for new images
+        if (adsToUpload.length > 0) {
+          console.log(`Starting background Tenor upload for ${adsToUpload.length} ads`);
+          adsToUpload.forEach(({ adKey, imageUrl }) => {
+            uploadImageToTenor(adKey, imageUrl, settings._id);
+          });
+        }
     
     res.json(settings.ads);
   } catch (error) {
@@ -285,10 +344,10 @@ router.put('/settings/ads', verifyToken, async (req, res) => {
   }
 });
 
-// Background image upload to ImgBB function
-async function uploadImageToCloudinary(adKey, imageUrl, settingsId) {
+// Background image upload to Tenor function
+async function uploadImageToTenor(adKey, imageUrl, settingsId) {
   try {
-    console.log(`[Background] Starting ImgBB upload for ${adKey}: ${imageUrl}`);
+    console.log(`[Background] Starting Tenor upload for ${adKey}: ${imageUrl}`);
     
     // Download image from URL
     const response = await axios.get(imageUrl, {
@@ -296,53 +355,57 @@ async function uploadImageToCloudinary(adKey, imageUrl, settingsId) {
       timeout: 30000
     });
     
-    // Upload to ImgBB (free hosting for large files)
-    console.log(`[Background ImgBB] Uploading ${adKey} to ImgBB`);
+    // Upload to Tenor (free hosting for large GIFs up to 25MB)
+    console.log(`[Background Tenor] Uploading ${adKey} to Tenor`);
     
-    const imgbbApiKey = process.env.IMGBB_API_KEY;
-    if (!imgbbApiKey) {
-      throw new Error('ImgBB API key not configured');
+    const tenorApiKey = process.env.TENOR_API_KEY;
+    if (!tenorApiKey) {
+      throw new Error('Tenor API key not configured');
     }
     
     // Check file size before uploading
     const fileSizeMB = (response.data.length / 1024 / 1024).toFixed(2);
-    console.log(`[Background ImgBB Debug] File size: ${fileSizeMB}MB`);
+    console.log(`[Background Tenor Debug] File size: ${fileSizeMB}MB`);
     
-    if (response.data.length > 32 * 1024 * 1024) { // 32MB limit
-      throw new Error(`File too large (${fileSizeMB}MB). ImgBB has a 32MB limit.`);
+    if (response.data.length > 25 * 1024 * 1024) { // 25MB limit for Tenor
+      throw new Error(`File too large (${fileSizeMB}MB). Tenor has a 25MB limit.`);
     }
     
-    const form = new FormData();
-    form.append('image', Buffer.from(response.data).toString('base64'));
-    form.append('key', imgbbApiKey);
+    // Convert buffer to base64
+    const base64Image = Buffer.from(response.data).toString('base64');
     
-    console.log(`[Background ImgBB Debug] Uploading image to ImgBB...`);
-    const imgbbResponse = await axios.post('https://api.imgbb.com/1/upload', form, {
-      headers: form.getHeaders(),
+    // Upload to Tenor using their upload API
+    console.log(`[Background Tenor Debug] Uploading image to Tenor...`);
+    const tenorResponse = await axios.post('https://tenor.googleapis.com/v2/upload', {
+      key: tenorApiKey,
+      data: base64Image,
+      filename: `${adKey}_${Date.now()}.gif`
+    }, {
       timeout: 120000 // 2 minutes for large files
     });
-    console.log(`[Background ImgBB Debug] Response status: ${imgbbResponse.status}`);
-    console.log(`[Background ImgBB Debug] Response data:`, imgbbResponse.data);
     
-    if (!imgbbResponse.data.success) {
-      throw new Error(`ImgBB upload failed: ${imgbbResponse.data.error?.message || 'Unknown error'}`);
+    console.log(`[Background Tenor Debug] Response status: ${tenorResponse.status}`);
+    console.log(`[Background Tenor Debug] Response data:`, tenorResponse.data);
+    
+    if (!tenorResponse.data.success) {
+      throw new Error(`Tenor upload failed: ${tenorResponse.data.error?.message || 'Unknown error'}`);
     }
     
-    const imgbbUrl = imgbbResponse.data.data.url;
-    console.log(`[Background ImgBB] Successfully uploaded ${adKey}: ${imgbbUrl}`);
+    const tenorUrl = tenorResponse.data.data.url;
+    console.log(`[Background Tenor] Successfully uploaded ${adKey}: ${tenorUrl}`);
     
-    // Update the database with ImgBB URL
+    // Update the database with Tenor URL
     const settings = await SiteSettings.findById(settingsId);
     if (settings && settings.ads[adKey]) {
-      settings.ads[adKey].cloudinaryUrl = imgbbUrl;
+      settings.ads[adKey].cloudinaryUrl = tenorUrl;
       await settings.save();
-      console.log(`[Background] Successfully uploaded to ImgBB and updated ${adKey}: ${settings.ads[adKey].cloudinaryUrl}`);
+      console.log(`[Background] Successfully uploaded to Tenor and updated ${adKey}: ${settings.ads[adKey].cloudinaryUrl}`);
     }
     
   } catch (error) {
-    console.error(`[Background] Error uploading image to ImgBB for ${adKey}:`, error);
+    console.error(`[Background] Error uploading image to Tenor for ${adKey}:`, error);
     
-    // Fallback to local storage if ImgBB fails
+    // Fallback to local storage if Tenor fails
     try {
       console.log(`[Background Fallback] Saving ${adKey} locally`);
       
@@ -462,61 +525,67 @@ router.post('/upload-ad-image', verifyToken, async (req, res) => {
     const base64Image = Buffer.from(processedBuffer, 'binary').toString('base64');
     const dataURI = `data:${response.headers['content-type']};base64,${base64Image}`;
     
-    // Upload to ImgBB (free hosting for large files)
-    console.log(`[ImgBB] Uploading ${adKey} to ImgBB`);
+    // Upload to Tenor (free hosting for large GIFs up to 25MB)
+    console.log(`[Tenor] Uploading ${adKey} to Tenor`);
     
-    const imgbbApiKey = process.env.IMGBB_API_KEY;
-    console.log(`[ImgBB Debug] API Key configured: ${imgbbApiKey ? 'Yes' : 'No'}`);
-    if (!imgbbApiKey) {
-      throw new Error('ImgBB API key not configured. Please add IMGBB_API_KEY to your .env file');
+    const tenorApiKey = process.env.TENOR_API_KEY;
+    console.log(`[Tenor Debug] API Key configured: ${tenorApiKey ? 'Yes' : 'No'}`);
+    if (!tenorApiKey) {
+      throw new Error('Tenor API key not configured. Please add TENOR_API_KEY to your .env file');
     }
     
     // Check file size before uploading
     const fileSizeMB = (processedBuffer.length / 1024 / 1024).toFixed(2);
-    console.log(`[ImgBB Debug] File size: ${fileSizeMB}MB`);
+    console.log(`[Tenor Debug] File size: ${fileSizeMB}MB`);
     
-    if (processedBuffer.length > 32 * 1024 * 1024) { // 32MB limit
-      throw new Error(`File too large (${fileSizeMB}MB). ImgBB has a 32MB limit.`);
+    if (processedBuffer.length > 25 * 1024 * 1024) { // 25MB limit for Tenor
+      throw new Error(`File too large (${fileSizeMB}MB). Tenor has a 25MB limit.`);
     }
     
-    const form = new FormData();
-    form.append('image', Buffer.from(processedBuffer).toString('base64'));
-    form.append('key', imgbbApiKey);
-    
-    console.log(`[Manual ImgBB Debug] Uploading image to ImgBB...`);
-    const imgbbResponse = await axios.post('https://api.imgbb.com/1/upload', form, {
-      headers: form.getHeaders(),
-      timeout: 120000 // 2 minutes for large files
-    });
-    console.log(`[Manual ImgBB Debug] Response status: ${imgbbResponse.status}`);
-    console.log(`[Manual ImgBB Debug] Response data:`, imgbbResponse.data);
-    
-    if (!imgbbResponse.data.success) {
-      throw new Error(`ImgBB upload failed: ${imgbbResponse.data.error?.message || 'Unknown error'}`);
+    try {
+      // Upload to Tenor using their upload API
+      const tenorResponse = await axios.post('https://tenor.googleapis.com/v2/upload', {
+        key: tenorApiKey,
+        data: base64Image,
+        filename: `${adKey}_${Date.now()}.gif`
+      }, {
+        timeout: 120000 // 2 minutes for large files
+      });
+      
+      console.log(`[Manual Tenor Debug] Response status: ${tenorResponse.status}`);
+      console.log(`[Manual Tenor Debug] Response data:`, tenorResponse.data);
+      
+      if (!tenorResponse.data.success) {
+        throw new Error(`Tenor upload failed: ${tenorResponse.data.error?.message || 'Unknown error'}`);
+      }
+      
+      const tenorUrl = tenorResponse.data.data.url;
+      console.log(`[Tenor] Successfully uploaded ${adKey}: ${tenorUrl}`);
+      
+      // Update the ad setting with Tenor URL (keeping cloudinaryUrl field name)
+      settings.ads[adKey].cloudinaryUrl = tenorUrl;
+      await settings.save();
+      
+      res.json({ 
+        success: true, 
+        cloudinaryUrl: settings.ads[adKey].cloudinaryUrl,
+        message: 'Image uploaded to Tenor successfully' 
+      });
+      
+    } catch (uploadError) {
+      console.error('Error uploading to Tenor:', uploadError);
+      throw uploadError;
     }
-    
-    const imgbbUrl = imgbbResponse.data.data.url;
-    console.log(`[ImgBB] Successfully uploaded ${adKey}: ${imgbbUrl}`);
-    
-    // Update the ad setting with ImgBB URL (keeping cloudinaryUrl field name)
-    settings.ads[adKey].cloudinaryUrl = imgbbUrl;
-    await settings.save();
-    
-    res.json({ 
-      success: true, 
-      cloudinaryUrl: settings.ads[adKey].cloudinaryUrl,
-      message: 'Image uploaded to ImgBB successfully' 
-    });
     
   } catch (error) {
-    console.error('Error uploading ad image to ImgBB:', error);
+    console.error('Error uploading ad image to Tenor:', error);
     
-    // Fallback to local storage if ImgBB fails
+    // Fallback to local storage if Tenor fails
     const isGif = response?.headers['content-type']?.includes('gif') || 
                   imageUrl.toLowerCase().includes('.gif');
     
     if (isGif || error.code === 'ECONNABORTED') {
-      console.log(`[Fallback] ImgBB failed (${error.code || 'unknown error'}), saving locally for ${adKey}`);
+      console.log(`[Fallback] Tenor failed (${error.code || 'unknown error'}), saving locally for ${adKey}`);
       
       try {
         // Fallback to local storage
@@ -543,7 +612,7 @@ router.post('/upload-ad-image', verifyToken, async (req, res) => {
         res.json({ 
           success: true, 
           cloudinaryUrl: settings.ads[adKey].cloudinaryUrl,
-          message: 'GIF saved locally. Check your ImgBB API key configuration.' 
+          message: 'GIF saved locally. Check your Tenor API key configuration.' 
         });
         return;
       } catch (saveError) {
@@ -559,8 +628,12 @@ router.post('/upload-ad-image', verifyToken, async (req, res) => {
       errorMessage = 'Could not reach the image URL';
     } else if (error.code === 'ECONNABORTED') {
       errorMessage = 'Request timed out while downloading image';
-    } else if (error.error?.name === 'TimeoutError') {
-      errorMessage = 'ImgBB upload timed out. Try with a smaller image or check your internet connection.';
+    } else if (error.response?.status === 400) {
+      errorMessage = 'Invalid image format or file too large (max 25MB for Tenor)';
+    } else if (error.response?.status === 401) {
+      errorMessage = 'Invalid Tenor API key';
+    } else if (error.response?.status === 429) {
+      errorMessage = 'Tenor API rate limit exceeded. Please try again later.';
     } else if (error.message) {
       errorMessage = error.message;
     }

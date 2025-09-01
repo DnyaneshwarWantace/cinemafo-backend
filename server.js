@@ -11,10 +11,7 @@ const PORT = process.env.PORT || 5000;
 const BACKEND_URL = process.env.BACKEND_URL || `http://localhost:${PORT}/api`;
 
 // MongoDB Connection
-mongoose.connect(process.env.DATABASE_URL, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-}).then(() => {
+mongoose.connect(process.env.DATABASE_URL).then(() => {
   console.log('✅ Connected to MongoDB');
 }).catch((error) => {
   console.error('❌ MongoDB connection error:', error);
