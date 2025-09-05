@@ -4,6 +4,7 @@ const axios = require('axios');
 const NodeCache = require('node-cache');
 const crypto = require('crypto');
 const mongoose = require('mongoose');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
@@ -124,6 +125,9 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 app.use(express.json());
+
+// Serve static files from uploads directory
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Enhanced TMDB API call with caching, retry logic, and API key rotation
 async function fetchFromTMDB(endpoint, params = {}) {

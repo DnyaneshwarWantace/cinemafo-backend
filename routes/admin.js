@@ -2,11 +2,15 @@ const express = require('express');
 const router = express.Router();
 const SiteSettings = require('../models/SiteSettings');
 const Admin = require('../models/Admin');
+const AdClick = require('../models/AdClick');
 const jwt = require('jsonwebtoken');
 const cloudinary = require('cloudinary').v2;
 const axios = require('axios');
 const sharp = require('sharp');
 const FormData = require('form-data');
+const fs = require('fs');
+const path = require('path');
+const { v4: uuidv4 } = require('uuid');
 
 // Configure Cloudinary
 cloudinary.config({
@@ -541,47 +545,48 @@ router.post('/upload-ad-image', verifyToken, async (req, res) => {
       throw new Error(`File too large (${fileSizeMB}MB). Tenor has a 25MB limit.`);
     }
     
+    // Skip Tenor upload for now due to API issues - use local storage instead
+    console.log(`[Info] Skipping Tenor upload due to API issues, using local storage for ${adKey}`);
+    
     try {
-      // Upload to Tenor using their upload API
-      const tenorResponse = await axios.post('https://tenor.googleapis.com/v2/upload', {
-        key: tenorApiKey,
-        data: base64Image,
-        filename: `${adKey}_${Date.now()}.gif`
-      }, {
-        timeout: 120000 // 2 minutes for large files
-      });
+      // Save locally instead of using Tenor
+      const filename = `${adKey}_${Date.now()}.gif`;
+      const localPath = path.join(__dirname, '../uploads/ads', filename);
       
-      console.log(`[Manual Tenor Debug] Response status: ${tenorResponse.status}`);
-      console.log(`[Manual Tenor Debug] Response data:`, tenorResponse.data);
-      
-      if (!tenorResponse.data.success) {
-        throw new Error(`Tenor upload failed: ${tenorResponse.data.error?.message || 'Unknown error'}`);
+      // Ensure uploads directory exists
+      const uploadsDir = path.join(__dirname, '../uploads/ads');
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
       }
       
-      const tenorUrl = tenorResponse.data.data.url;
-      console.log(`[Tenor] Successfully uploaded ${adKey}: ${tenorUrl}`);
+      // Write the processed buffer to local file
+      fs.writeFileSync(localPath, processedBuffer);
       
-      // Update the ad setting with Tenor URL (keeping cloudinaryUrl field name)
-      settings.ads[adKey].cloudinaryUrl = tenorUrl;
+      // Create a local URL (you might need to adjust this based on your server setup)
+      const localUrl = `/uploads/ads/${filename}`;
+      
+      console.log(`[Local] Successfully saved ${adKey} locally: ${localUrl}`);
+      
+      // Update the ad setting with local URL
+      settings.ads[adKey].cloudinaryUrl = localUrl;
       await settings.save();
       
       res.json({ 
         success: true, 
         cloudinaryUrl: settings.ads[adKey].cloudinaryUrl,
-        message: 'Image uploaded to Tenor successfully' 
+        message: 'Image saved locally successfully' 
       });
       
-    } catch (uploadError) {
-      console.error('Error uploading to Tenor:', uploadError);
-      throw uploadError;
+    } catch (localError) {
+      console.error('Error saving locally:', localError);
+      throw localError;
     }
     
   } catch (error) {
     console.error('Error uploading ad image to Tenor:', error);
     
     // Fallback to local storage if Tenor fails
-    const isGif = response?.headers['content-type']?.includes('gif') || 
-                  imageUrl.toLowerCase().includes('.gif');
+    const isGif = imageUrl.toLowerCase().includes('.gif');
     
     if (isGif || error.code === 'ECONNABORTED') {
       console.log(`[Fallback] Tenor failed (${error.code || 'unknown error'}), saving locally for ${adKey}`);
@@ -692,6 +697,209 @@ router.put('/settings/css', verifyToken, async (req, res) => {
   } catch (error) {
     console.error('Error updating custom CSS:', error);
     res.status(500).json({ error: 'Failed to update custom CSS' });
+  }
+});
+
+// ==================== AD CLICK TRACKING ENDPOINTS ====================
+
+// Public endpoint to track ad clicks
+router.post('/public/track-ad-click', async (req, res) => {
+  try {
+    const {
+      adKey,
+      clickUrl,
+      pageUrl,
+      sessionId,
+      deviceType,
+      browser,
+      os
+    } = req.body;
+
+    // Validate required fields
+    if (!adKey || !clickUrl || !pageUrl) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // Get client IP and user agent
+    const ipAddress = req.ip || req.connection.remoteAddress || req.socket.remoteAddress || 
+                     (req.connection.socket ? req.connection.socket.remoteAddress : null) ||
+                     req.headers['x-forwarded-for'] || 'unknown';
+    const userAgent = req.headers['user-agent'] || 'unknown';
+    const referrer = req.headers.referer || req.headers.referrer || '';
+
+    // Generate session ID if not provided
+    const finalSessionId = sessionId || uuidv4();
+
+    // Create ad click record
+    const adClick = new AdClick({
+      adKey,
+      clickUrl,
+      userAgent,
+      ipAddress: ipAddress.split(',')[0].trim(), // Get first IP if multiple
+      referrer,
+      sessionId: finalSessionId,
+      pageUrl,
+      deviceType: deviceType || 'desktop',
+      browser: browser || 'unknown',
+      os: os || 'unknown'
+    });
+
+    await adClick.save();
+
+    console.log(`[AdClick] Tracked click for ad: ${adKey}, session: ${finalSessionId}`);
+
+    res.json({ 
+      success: true, 
+      sessionId: finalSessionId,
+      message: 'Ad click tracked successfully' 
+    });
+
+  } catch (error) {
+    console.error('Error tracking ad click:', error);
+    res.status(500).json({ error: 'Failed to track ad click' });
+  }
+});
+
+// Admin endpoint to get ad click statistics
+router.get('/admin/ad-analytics', verifyToken, async (req, res) => {
+  try {
+    const { adKey, startDate, endDate, days = 30 } = req.query;
+
+    // Get click statistics
+    const stats = await AdClick.getClickStats(adKey, startDate, endDate);
+    
+    // Get daily trends
+    const trends = await AdClick.getDailyTrends(adKey, parseInt(days));
+
+    // Get recent clicks (last 50)
+    const recentClicks = await AdClick.find(
+      adKey ? { adKey } : {},
+      null,
+      { sort: { timestamp: -1 }, limit: 50 }
+    ).select('adKey clickUrl timestamp ipAddress deviceType browser country city sessionId');
+
+    // Get total unique sessions across all ads
+    const totalUniqueSessions = await AdClick.distinct('sessionId', 
+      adKey ? { adKey } : {}
+    );
+
+    // Get total configured ads from site settings
+    const siteSettings = await SiteSettings.findOne();
+    const configuredAds = siteSettings ? Object.keys(siteSettings.ads || {}) : [];
+    const enabledAds = configuredAds.filter(adKey => siteSettings.ads[adKey]?.enabled);
+
+    res.json({
+      stats,
+      trends,
+      recentClicks,
+      totalUniqueSessions: totalUniqueSessions.length,
+      totalConfiguredAds: configuredAds.length,
+      totalEnabledAds: enabledAds.length
+    });
+
+  } catch (error) {
+    console.error('Error fetching ad analytics:', error);
+    res.status(500).json({ error: 'Failed to fetch ad analytics' });
+  }
+});
+
+// Admin endpoint to get ad click summary
+router.get('/admin/ad-summary', verifyToken, async (req, res) => {
+  try {
+    const { days = 7 } = req.query;
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - parseInt(days));
+
+    // Get total clicks in period
+    const totalClicks = await AdClick.countDocuments({
+      timestamp: { $gte: startDate }
+    });
+
+    // Get unique sessions in period
+    const uniqueSessions = await AdClick.distinct('sessionId', {
+      timestamp: { $gte: startDate }
+    });
+
+    // Get clicks by ad
+    const clicksByAd = await AdClick.aggregate([
+      { $match: { timestamp: { $gte: startDate } } },
+      {
+        $group: {
+          _id: '$adKey',
+          clicks: { $sum: 1 },
+          uniqueSessions: { $addToSet: '$sessionId' }
+        }
+      },
+      {
+        $project: {
+          adKey: '$_id',
+          clicks: 1,
+          uniqueSessions: { $size: '$uniqueSessions' }
+        }
+      },
+      { $sort: { clicks: -1 } }
+    ]);
+
+    // Get device breakdown
+    const deviceBreakdown = await AdClick.aggregate([
+      { $match: { timestamp: { $gte: startDate } } },
+      {
+        $group: {
+          _id: '$deviceType',
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { count: -1 } }
+    ]);
+
+    res.json({
+      period: `${days} days`,
+      totalClicks,
+      uniqueSessions: uniqueSessions.length,
+      clicksByAd,
+      deviceBreakdown
+    });
+
+  } catch (error) {
+    console.error('Error fetching ad summary:', error);
+    res.status(500).json({ error: 'Failed to fetch ad summary' });
+  }
+});
+
+// Admin endpoint to export ad click data
+router.get('/admin/export-ad-data', verifyToken, async (req, res) => {
+  try {
+    const { adKey, startDate, endDate, format = 'json' } = req.query;
+
+    const matchStage = {};
+    if (adKey) matchStage.adKey = adKey;
+    if (startDate || endDate) {
+      matchStage.timestamp = {};
+      if (startDate) matchStage.timestamp.$gte = new Date(startDate);
+      if (endDate) matchStage.timestamp.$lte = new Date(endDate);
+    }
+
+    const clicks = await AdClick.find(matchStage)
+      .sort({ timestamp: -1 })
+      .select('adKey clickUrl timestamp ipAddress deviceType browser os country city sessionId pageUrl referrer');
+
+    if (format === 'csv') {
+      // Convert to CSV format
+      const csvHeader = 'Ad Key,Click URL,Timestamp,IP Address,Device Type,Browser,OS,Country,City,Session ID,Page URL,Referrer\n';
+      const csvData = clicks.map(click => 
+        `"${click.adKey}","${click.clickUrl}","${click.timestamp}","${click.ipAddress}","${click.deviceType}","${click.browser}","${click.os}","${click.country}","${click.city}","${click.sessionId}","${click.pageUrl}","${click.referrer}"`
+      ).join('\n');
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="ad-clicks-${Date.now()}.csv"`);
+      res.send(csvHeader + csvData);
+    } else {
+      res.json(clicks);
+    }
+
+  } catch (error) {
+    console.error('Error exporting ad data:', error);
+    res.status(500).json({ error: 'Failed to export ad data' });
   }
 });
 
