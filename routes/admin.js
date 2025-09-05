@@ -261,35 +261,34 @@ router.put('/settings/social-links', verifyToken, async (req, res) => {
   }
 });
 
-// Update content settings
+// Update content settings (disclaimer and about us only)
 router.put('/settings/content', verifyToken, async (req, res) => {
   try {
-    const { disclaimer, aboutUs, socialLinks } = req.body;
+    console.log('📝 Updating content settings...');
+    const { disclaimer, aboutUs } = req.body;
+    console.log('📤 Received data:', { disclaimer, aboutUs });
     
     let settings = await SiteSettings.findOne();
     if (!settings) {
+      console.log('📄 No settings found, creating new settings...');
       settings = new SiteSettings();
     }
     
-    settings.content = {
-      ...settings.content,
-      disclaimer: disclaimer || '',
-      aboutUs: aboutUs || ''
-    };
+    console.log('📊 Current settings.content:', settings.content);
     
-    // Update social links in floatingSocialButtons if provided
-    if (socialLinks) {
-      settings.appearance.floatingSocialButtons = {
-        ...settings.appearance.floatingSocialButtons,
-        discordUrl: socialLinks.discord || '',
-        telegramUrl: socialLinks.telegram || ''
-      };
-    }
+    // Only update disclaimer and about us - do NOT touch social links
+    // Use $set to update only specific fields without affecting socialLinks
+    settings.content.disclaimer = disclaimer || '';
+    settings.content.aboutUs = aboutUs || '';
     
+    console.log('💾 Saving settings...');
     await settings.save();
+    console.log('✅ Settings saved successfully');
+    console.log('📤 Returning updated content:', settings.content);
     res.json(settings.content);
   } catch (error) {
-    console.error('Error updating content settings:', error);
+    console.error('❌ Error updating content settings:', error);
+    console.error('❌ Error stack:', error.stack);
     res.status(500).json({ error: 'Failed to update content settings' });
   }
 });
