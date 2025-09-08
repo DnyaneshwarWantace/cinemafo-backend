@@ -11,6 +11,7 @@ const FormData = require('form-data');
 const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const GoogleDriveService = require('../google-drive-service.js');
 
 // Configure Cloudinary
 cloudinary.config({
@@ -18,6 +19,9 @@ cloudinary.config({
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
+
+// Initialize Google Drive Service
+const googleDriveService = new GoogleDriveService();
 
 // Public endpoint to get site settings
 router.get('/public/settings', async (req, res) => {
@@ -319,7 +323,7 @@ router.put('/settings/ads', verifyToken, async (req, res) => {
         settings.ads[adKey] = {
           enabled: adSettings[adKey].enabled || false,
           imageUrl: newImageUrl,
-          cloudinaryUrl: newImageUrl !== oldImageUrl ? '' : (adSettings[adKey].cloudinaryUrl || settings.ads[adKey].cloudinaryUrl || ''),
+          cloudinaryUrl: adSettings[adKey].cloudinaryUrl !== undefined ? adSettings[adKey].cloudinaryUrl : (newImageUrl !== oldImageUrl ? '' : settings.ads[adKey].cloudinaryUrl || ''),
           clickUrl: adSettings[adKey].clickUrl || ''
         };
         
@@ -332,11 +336,11 @@ router.put('/settings/ads', verifyToken, async (req, res) => {
     
     await settings.save();
     
-            // Start background uploads to Tenor for new images
+            // Start background uploads to Google Drive for new images
         if (adsToUpload.length > 0) {
-          console.log(`Starting background Tenor upload for ${adsToUpload.length} ads`);
+          console.log(`Starting background Google Drive upload for ${adsToUpload.length} ads`);
           adsToUpload.forEach(({ adKey, imageUrl }) => {
-            uploadImageToTenor(adKey, imageUrl, settings._id);
+            uploadImageToGoogleDrive(adKey, imageUrl, settings._id);
           });
         }
     
@@ -347,97 +351,27 @@ router.put('/settings/ads', verifyToken, async (req, res) => {
   }
 });
 
-// Background image upload to Tenor function
-async function uploadImageToTenor(adKey, imageUrl, settingsId) {
+// Background image upload to Google Drive function
+async function uploadImageToGoogleDrive(adKey, imageUrl, settingsId) {
   try {
-    console.log(`[Background] Starting Tenor upload for ${adKey}: ${imageUrl}`);
+    console.log(`[Background] Starting Google Drive upload for ${adKey}: ${imageUrl}`);
     
-    // Download image from URL
-    const response = await axios.get(imageUrl, {
-      responseType: 'arraybuffer',
-      timeout: 30000
-    });
+    // Upload to Google Drive using the service
+    const result = await googleDriveService.uploadGifFromUrl(imageUrl, adKey);
     
-    // Upload to Tenor (free hosting for large GIFs up to 25MB)
-    console.log(`[Background Tenor] Uploading ${adKey} to Tenor`);
+    console.log(`[Background Google Drive] Successfully uploaded ${adKey}: ${result.displayUrl}`);
     
-    const tenorApiKey = process.env.TENOR_API_KEY;
-    if (!tenorApiKey) {
-      throw new Error('Tenor API key not configured');
-    }
-    
-    // Check file size before uploading
-    const fileSizeMB = (response.data.length / 1024 / 1024).toFixed(2);
-    console.log(`[Background Tenor Debug] File size: ${fileSizeMB}MB`);
-    
-    if (response.data.length > 25 * 1024 * 1024) { // 25MB limit for Tenor
-      throw new Error(`File too large (${fileSizeMB}MB). Tenor has a 25MB limit.`);
-    }
-    
-    // Convert buffer to base64
-    const base64Image = Buffer.from(response.data).toString('base64');
-    
-    // Upload to Tenor using their upload API
-    console.log(`[Background Tenor Debug] Uploading image to Tenor...`);
-    const tenorResponse = await axios.post('https://tenor.googleapis.com/v2/upload', {
-      key: tenorApiKey,
-      data: base64Image,
-      filename: `${adKey}_${Date.now()}.gif`
-    }, {
-      timeout: 120000 // 2 minutes for large files
-    });
-    
-    console.log(`[Background Tenor Debug] Response status: ${tenorResponse.status}`);
-    console.log(`[Background Tenor Debug] Response data:`, tenorResponse.data);
-    
-    if (!tenorResponse.data.success) {
-      throw new Error(`Tenor upload failed: ${tenorResponse.data.error?.message || 'Unknown error'}`);
-    }
-    
-    const tenorUrl = tenorResponse.data.data.url;
-    console.log(`[Background Tenor] Successfully uploaded ${adKey}: ${tenorUrl}`);
-    
-    // Update the database with Tenor URL
+    // Update the database with Google Drive URL
     const settings = await SiteSettings.findById(settingsId);
     if (settings && settings.ads[adKey]) {
-      settings.ads[adKey].cloudinaryUrl = tenorUrl;
+      settings.ads[adKey].cloudinaryUrl = result.displayUrl;
       await settings.save();
-      console.log(`[Background] Successfully uploaded to Tenor and updated ${adKey}: ${settings.ads[adKey].cloudinaryUrl}`);
+      console.log(`[Background] Successfully uploaded to Google Drive and updated ${adKey}: ${settings.ads[adKey].cloudinaryUrl}`);
     }
     
   } catch (error) {
-    console.error(`[Background] Error uploading image to Tenor for ${adKey}:`, error);
-    
-    // Fallback to local storage if Tenor fails
-    try {
-      console.log(`[Background Fallback] Saving ${adKey} locally`);
-      
-      const fs = require('fs');
-      const path = require('path');
-      
-      // Create uploads directory if it doesn't exist
-      const uploadsDir = path.join(__dirname, '..', 'uploads', 'ads');
-      if (!fs.existsSync(uploadsDir)) {
-        fs.mkdirSync(uploadsDir, { recursive: true });
-      }
-      
-      // Generate filename
-      const filename = `${adKey}_${Date.now()}.gif`;
-      const filePath = path.join(uploadsDir, filename);
-      
-      // Save the image
-      fs.writeFileSync(filePath, response.data);
-      
-      // Update the database with local URL
-      const settings = await SiteSettings.findById(settingsId);
-      if (settings && settings.ads[adKey]) {
-        settings.ads[adKey].cloudinaryUrl = `/api/admin/ad-images/${filename}`;
-        await settings.save();
-        console.log(`[Background Fallback] Successfully saved locally and updated ${adKey}: ${settings.ads[adKey].cloudinaryUrl}`);
-      }
-    } catch (fallbackError) {
-      console.error(`[Background Fallback] Error saving locally for ${adKey}:`, fallbackError);
-    }
+    console.error(`[Background] Error uploading image to Google Drive for ${adKey}:`, error);
+    // No fallback - Google Drive upload failed, log the error
   }
 }
 
@@ -460,172 +394,28 @@ router.post('/upload-ad-image', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'Invalid ad key' });
     }
     
-    console.log(`[Manual Upload] Starting ImgBB upload for ${adKey}: ${imageUrl}`);
+    console.log(`[Manual Upload] Starting Google Drive upload for ${adKey}: ${imageUrl}`);
     
-    // Download image from URL and upload to Cloudinary
-    let response;
-    try {
-      response = await axios.get(imageUrl, {
-        responseType: 'arraybuffer',
-        timeout: 30000,
-        validateStatus: function (status) {
-          return status < 500; // Accept all status codes less than 500
-        }
-      });
-      
-      if (response.status !== 200) {
-        return res.status(400).json({ 
-          error: `Failed to download image: HTTP ${response.status} - Image not found or inaccessible` 
-        });
-      }
-    } catch (downloadError) {
-      console.error('Error downloading image:', downloadError);
-      return res.status(400).json({ 
-        error: `Failed to download image: ${downloadError.message}` 
-      });
-    }
+    // Upload to Google Drive using the service
+    const result = await googleDriveService.uploadGifFromUrl(imageUrl, adKey);
     
-    // Only compress non-GIF images if they're too large
-    let processedBuffer = response.data;
-    const originalSize = response.data.length;
+    console.log(`[Google Drive] Successfully uploaded ${adKey}: ${result.displayUrl}`);
     
-    // Check if it's a GIF by content type or file extension
-    const isGif = response.headers['content-type']?.includes('gif') || 
-                  imageUrl.toLowerCase().includes('.gif');
+    // Update the ad setting with Google Drive URL
+    settings.ads[adKey].cloudinaryUrl = result.displayUrl;
+    await settings.save();
     
-    if (originalSize > 10 * 1024 * 1024 && !isGif) { // Only compress if larger than 10MB AND not a GIF
-      console.log(`[Image Processing] Compressing non-GIF image for ${adKey} - Original size: ${(originalSize / 1024 / 1024).toFixed(2)}MB`);
-      
-      try {
-        const image = sharp(response.data);
-        const metadata = await image.metadata();
-        
-        // For other formats, resize if too large
-        let processedImage = image;
-        if (metadata.width > 1920 || metadata.height > 1080) {
-          processedImage = image.resize(1920, 1080, { 
-            fit: 'inside',
-            withoutEnlargement: true 
-          });
-        }
-        
-        if (metadata.format === 'png') {
-          processedBuffer = await processedImage.png({ quality: 80 }).toBuffer();
-        } else {
-          processedBuffer = await processedImage.jpeg({ quality: 80 }).toBuffer();
-        }
-        
-        console.log(`[Image Processing] Compressed ${adKey} - New size: ${(processedBuffer.length / 1024 / 1024).toFixed(2)}MB`);
-      } catch (compressError) {
-        console.error(`[Image Processing] Compression failed for ${adKey}, using original:`, compressError.message);
-        processedBuffer = response.data;
-      }
-    } else if (isGif && originalSize > 10 * 1024 * 1024) {
-      console.log(`[Image Processing] GIF too large (${(originalSize / 1024 / 1024).toFixed(2)}MB) but keeping original to preserve animation`);
-    }
-    
-    // Convert buffer to base64
-    const base64Image = Buffer.from(processedBuffer, 'binary').toString('base64');
-    const dataURI = `data:${response.headers['content-type']};base64,${base64Image}`;
-    
-    // Upload to Tenor (free hosting for large GIFs up to 25MB)
-    console.log(`[Tenor] Uploading ${adKey} to Tenor`);
-    
-    const tenorApiKey = process.env.TENOR_API_KEY;
-    console.log(`[Tenor Debug] API Key configured: ${tenorApiKey ? 'Yes' : 'No'}`);
-    if (!tenorApiKey) {
-      throw new Error('Tenor API key not configured. Please add TENOR_API_KEY to your .env file');
-    }
-    
-    // Check file size before uploading
-    const fileSizeMB = (processedBuffer.length / 1024 / 1024).toFixed(2);
-    console.log(`[Tenor Debug] File size: ${fileSizeMB}MB`);
-    
-    if (processedBuffer.length > 25 * 1024 * 1024) { // 25MB limit for Tenor
-      throw new Error(`File too large (${fileSizeMB}MB). Tenor has a 25MB limit.`);
-    }
-    
-    // Skip Tenor upload for now due to API issues - use local storage instead
-    console.log(`[Info] Skipping Tenor upload due to API issues, using local storage for ${adKey}`);
-    
-    try {
-      // Save locally instead of using Tenor
-      const filename = `${adKey}_${Date.now()}.gif`;
-      const localPath = path.join(__dirname, '../uploads/ads', filename);
-      
-      // Ensure uploads directory exists
-      const uploadsDir = path.join(__dirname, '../uploads/ads');
-      if (!fs.existsSync(uploadsDir)) {
-        fs.mkdirSync(uploadsDir, { recursive: true });
-      }
-      
-      // Write the processed buffer to local file
-      fs.writeFileSync(localPath, processedBuffer);
-      
-      // Create a local URL (you might need to adjust this based on your server setup)
-      const localUrl = `/uploads/ads/${filename}`;
-      
-      console.log(`[Local] Successfully saved ${adKey} locally: ${localUrl}`);
-      
-      // Update the ad setting with local URL
-      settings.ads[adKey].cloudinaryUrl = localUrl;
-      await settings.save();
-      
-      res.json({ 
-        success: true, 
-        cloudinaryUrl: settings.ads[adKey].cloudinaryUrl,
-        message: 'Image saved locally successfully' 
-      });
-      
-    } catch (localError) {
-      console.error('Error saving locally:', localError);
-      throw localError;
-    }
+    res.json({ 
+      success: true, 
+      cloudinaryUrl: settings.ads[adKey].cloudinaryUrl,
+      message: 'Image uploaded to Google Drive successfully' 
+    });
     
   } catch (error) {
-    console.error('Error uploading ad image to Tenor:', error);
-    
-    // Fallback to local storage if Tenor fails
-    const isGif = imageUrl.toLowerCase().includes('.gif');
-    
-    if (isGif || error.code === 'ECONNABORTED') {
-      console.log(`[Fallback] Tenor failed (${error.code || 'unknown error'}), saving locally for ${adKey}`);
-      
-      try {
-        // Fallback to local storage
-        const fs = require('fs');
-        const path = require('path');
-        
-        // Create uploads directory if it doesn't exist
-        const uploadsDir = path.join(__dirname, '..', 'uploads', 'ads');
-        if (!fs.existsSync(uploadsDir)) {
-          fs.mkdirSync(uploadsDir, { recursive: true });
-        }
-        
-        // Generate filename
-        const filename = `${adKey}_${Date.now()}.gif`;
-        const filePath = path.join(uploadsDir, filename);
-        
-        // Save the GIF
-        fs.writeFileSync(filePath, response.data);
-        
-        // Update the ad setting with local URL
-        settings.ads[adKey].cloudinaryUrl = `/api/admin/ad-images/${filename}`;
-        await settings.save();
-        
-        res.json({ 
-          success: true, 
-          cloudinaryUrl: settings.ads[adKey].cloudinaryUrl,
-          message: 'GIF saved locally. Check your Tenor API key configuration.' 
-        });
-        return;
-      } catch (saveError) {
-        console.error('Error saving GIF locally:', saveError);
-      }
-    }
+    console.error('Error uploading ad image to Google Drive:', error);
     
     // Provide more specific error messages
-    let errorMessage = 'Failed to upload image';
+    let errorMessage = 'Failed to upload image to Google Drive';
     if (error.response?.status === 404) {
       errorMessage = 'Image not found at the provided URL';
     } else if (error.code === 'ENOTFOUND') {
@@ -633,11 +423,13 @@ router.post('/upload-ad-image', verifyToken, async (req, res) => {
     } else if (error.code === 'ECONNABORTED') {
       errorMessage = 'Request timed out while downloading image';
     } else if (error.response?.status === 400) {
-      errorMessage = 'Invalid image format or file too large (max 25MB for Tenor)';
+      errorMessage = 'Invalid image format or file too large';
     } else if (error.response?.status === 401) {
-      errorMessage = 'Invalid Tenor API key';
+      errorMessage = 'Google Drive authentication failed - please check your Google Drive credentials in .env file';
+    } else if (error.response?.status === 403) {
+      errorMessage = 'Google Drive API access denied - check permissions and API quota';
     } else if (error.response?.status === 429) {
-      errorMessage = 'Tenor API rate limit exceeded. Please try again later.';
+      errorMessage = 'Google Drive API rate limit exceeded. Please try again later.';
     } else if (error.message) {
       errorMessage = error.message;
     }
@@ -646,39 +438,7 @@ router.post('/upload-ad-image', verifyToken, async (req, res) => {
   }
 });
 
-// Serve local ad images (fallback for large GIFs)
-router.get('/ad-images/:filename', (req, res) => {
-  try {
-    const { filename } = req.params;
-    const filePath = path.join(__dirname, '..', 'uploads', 'ads', filename);
-    
-    if (!require('fs').existsSync(filePath)) {
-      return res.status(404).json({ error: 'Image not found' });
-    }
-    
-    // Set appropriate headers
-    const ext = require('path').extname(filename).toLowerCase();
-    const mimeTypes = {
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.png': 'image/png',
-      '.gif': 'image/gif',
-      '.webp': 'image/webp'
-    };
-    
-    const contentType = mimeTypes[ext] || 'application/octet-stream';
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
-    
-    // Stream the file
-    const stream = require('fs').createReadStream(filePath);
-    stream.pipe(res);
-    
-  } catch (error) {
-    console.error('Error serving ad image:', error);
-    res.status(500).json({ error: 'Failed to serve image' });
-  }
-});
+// Note: Local image serving endpoint removed - using Google Drive only
 
 // Update custom CSS
 router.put('/settings/css', verifyToken, async (req, res) => {
