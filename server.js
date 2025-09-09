@@ -1043,12 +1043,13 @@ app.get('/api/stream/movie/:id', async (req, res) => {
 
   try {
     // Perform a HEAD request to check if the file exists
-    await axios.head(checkUrl);
+    await axios.head(checkUrl, { timeout: 5000 }); // 5 second timeout
     // If the request is successful, return the stream URL
     res.json({ stream: { url: finalUrl } });
   } catch (error) {
-    // If the file is not found or another error occurs
-    res.status(404).json({ error: "Movie file not found" });
+    console.log(`Checker service timeout/error for movie ${id}:`, error.message);
+    // If checker service is down, still return the URL (let the player handle it)
+    res.json({ stream: { url: finalUrl } });
   }
 });
 
@@ -1061,12 +1062,13 @@ app.get('/api/stream/tv/:id/:season/:episode', async (req, res) => {
 
   try {
     // Perform a HEAD request to check if the file exists
-    await axios.head(checkUrl);
+    await axios.head(checkUrl, { timeout: 5000 }); // 5 second timeout
     // If the request is successful, return the stream URL
     res.json({ stream: { url: finalUrl } });
   } catch (error) {
-    // If the file is not found or another error occurs
-    res.status(404).json({ error: "TV file not found" });
+    console.log(`Checker service timeout/error for TV ${id}/${season}/${episode}:`, error.message);
+    // If checker service is down, still return the URL (let the player handle it)
+    res.json({ stream: { url: finalUrl } });
   }
 });
 
@@ -1080,13 +1082,14 @@ app.get("/api/official/movie/:tmdbid", async (req, res) => {
     const checkUrl = `http://checker.niggaflix.xyz/verify/movie/${tmdbid}`;
 
     try {
-        // Perform a HEAD request to check if the file exists
-        await axios.head(checkUrl);
+        // Perform a HEAD request to check if the file exists with timeout
+        await axios.head(checkUrl, { timeout: 5000 }); // 5 second timeout
         // If the request is successful, return the stream URL
         res.json({ stream: { url: finalUrl } });
     } catch (error) {
-        // If the file is not found or another error occurs
-        res.status(404).json({ error: "Movie file not found" });
+        console.log(`Checker service timeout/error for movie ${tmdbid}:`, error.message);
+        // If checker service is down, still return the URL (let the player handle it)
+        res.json({ stream: { url: finalUrl } });
     }
 });
 
@@ -1099,12 +1102,13 @@ app.get("/api/official/tv/:tmdbid/:season/:episode", async (req, res) => {
 
     try {
         // Perform a HEAD request to check if the file exists
-        await axios.head(checkUrl);
+        await axios.head(checkUrl, { timeout: 5000 }); // 5 second timeout
         // If the request is successful, return the stream URL
         res.json({ stream: { url: finalUrl } });
     } catch (error) {
-        // If the file is not found or another error occurs
-        res.status(404).json({ error: "TV file not found" });
+        console.log(`Checker service timeout/error for TV ${tmdbid}/${season}/${episode}:`, error.message);
+        // If checker service is down, still return the URL (let the player handle it)
+        res.json({ stream: { url: finalUrl } });
     }
 });
 
@@ -1116,12 +1120,13 @@ app.get("/api/niggaflix/movie/:tmdbid", async (req, res) => {
 
     try {
         // Perform a HEAD request to check if the file exists
-        await axios.head(checkUrl);
+        await axios.head(checkUrl, { timeout: 5000 }); // 5 second timeout
         // If the request is successful, return the stream URL
         res.json({ stream: { url: finalUrl } });
     } catch (error) {
-        // If the file is not found or another error occurs
-        res.status(404).json({ error: "Movie file not found" });
+        console.log(`Checker service timeout/error for movie ${tmdbid}:`, error.message);
+        // If checker service is down, still return the URL (let the player handle it)
+        res.json({ stream: { url: finalUrl } });
     }
 });
 
@@ -1134,12 +1139,13 @@ app.get("/api/niggaflix/tv/:tmdbid/:season/:episode", async (req, res) => {
 
     try {
         // Perform a HEAD request to check if the file exists
-        await axios.head(checkUrl);
+        await axios.head(checkUrl, { timeout: 5000 }); // 5 second timeout
         // If the request is successful, return the stream URL
         res.json({ stream: { url: finalUrl } });
     } catch (error) {
-        // If the file is not found or another error occurs
-        res.status(404).json({ error: "TV file not found" });
+        console.log(`Checker service timeout/error for TV ${tmdbid}/${season}/${episode}:`, error.message);
+        // If checker service is down, still return the URL (let the player handle it)
+        res.json({ stream: { url: finalUrl } });
     }
 });
 
