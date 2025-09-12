@@ -328,6 +328,7 @@ const getMockUpcomingMovies = () => {
 
 // Import routes
 const adminRoutes = require('./routes/admin');
+const referralRoutes = require('./routes/referral');
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -345,6 +346,52 @@ app.get('/api/health', (req, res) => {
 
 // Admin routes
 app.use('/api/admin', adminRoutes);
+
+// Referral routes
+app.use('/api/referral', referralRoutes);
+
+// Direct referral redirect route (for short URLs)
+app.get('/:code', async (req, res) => {
+  try {
+    const { code } = req.params;
+    const ip = req.ip || req.connection.remoteAddress || req.socket.remoteAddress;
+    const userAgent = req.get('User-Agent') || '';
+    
+    const Referral = require('./models/Referral');
+    
+    // Find the referral code
+    const referral = await Referral.findOne({ 
+      code: code.toUpperCase(), 
+      isActive: true 
+    });
+    
+    if (!referral) {
+      // If referral code doesn't exist, redirect to home
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8080';
+      return res.redirect(frontendUrl);
+    }
+    
+    // Track the visit
+    await referral.trackVisit(ip, userAgent, '/');
+    
+    // Set a cookie to track this user for conversion tracking
+    res.cookie('referral_source', code, { 
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+      httpOnly: false, // Allow frontend to read it
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax'
+    });
+    
+    // Redirect to frontend home page
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8080';
+    res.redirect(frontendUrl);
+    
+  } catch (error) {
+    console.error('Referral redirect error:', error);
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8080';
+    res.redirect(frontendUrl);
+  }
+});
 
 // Test TMDB connectivity with API key rotation
 app.get('/api/test-tmdb', async (req, res) => {
