@@ -348,15 +348,18 @@ app.get('/api/health', (req, res) => {
 app.use('/api/admin', adminRoutes);
 
 // Referral routes
-app.use('/api/referral', referralRoutes);// Clean referral redirect route (for /referral/:code URLs)
-app.get('/referral/:code', async (req, res) => {
+app.use('/api/referral', referralRoutes);
+
+// Direct referral redirect route (for short URLs)
+app.get('/:code', async (req, res) => {
   try {
     const { code } = req.params;
     const ip = req.ip || req.connection.remoteAddress || req.socket.remoteAddress;
     const userAgent = req.get('User-Agent') || '';
     
-    // Find the referral code
     const Referral = require('./models/Referral');
+    
+    // Find the referral code
     const referral = await Referral.findOne({ 
       code: code.toUpperCase(), 
       isActive: true 
@@ -380,16 +383,15 @@ app.get('/referral/:code', async (req, res) => {
     });
     
     // Redirect to frontend home page
-    const frontendUrl = process.env.FRONTEND_URL || 'https://cinemafo.lol';
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8080';
     res.redirect(frontendUrl);
     
   } catch (error) {
     console.error('Referral redirect error:', error);
-    const frontendUrl = process.env.FRONTEND_URL || 'https://cinemafo.lol';
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8080';
     res.redirect(frontendUrl);
   }
 });
-
 
 // Test TMDB connectivity with API key rotation
 app.get('/api/test-tmdb', async (req, res) => {
@@ -1376,59 +1378,6 @@ app.get('/api/tv/comedy-series', async (req, res) => {
   } catch (error) {
     console.error('Error fetching comedy series:', error);
     res.status(500).json({ error: 'Failed to fetch comedy series' });
-  }
-});
-
-// Direct referral redirect route (for short URLs) - placed at the end to avoid conflicts
-app.get('/:code', async (req, res) => {
-  try {
-    const { code } = req.params;
-    
-    // Skip if this is an API route, static file, or known path
-    if (req.path.startsWith('/api/') || 
-        req.path.includes('.') || 
-        req.path.startsWith('/uploads/') ||
-        req.path === '/favicon.ico' ||
-        req.path === '/robots.txt') {
-      return res.status(404).json({ error: 'Not found' });
-    }
-    
-    const ip = req.ip || req.connection.remoteAddress || req.socket.remoteAddress;
-    const userAgent = req.get('User-Agent') || '';
-    
-    const Referral = require('./models/Referral');
-    
-    // Find the referral code
-    const referral = await Referral.findOne({ 
-      code: code.toUpperCase(), 
-      isActive: true 
-    });
-    
-    if (!referral) {
-      // If referral code doesn't exist, redirect to home
-      const frontendUrl = process.env.FRONTEND_URL || 'https://cinemafo.lol';
-      return res.redirect(frontendUrl);
-    }
-    
-    // Track the visit
-    await referral.trackVisit(ip, userAgent, '/');
-    
-    // Set a cookie to track this user for conversion tracking
-    res.cookie('referral_source', code, { 
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-      httpOnly: false, // Allow frontend to read it
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax'
-    });
-    
-    // Redirect to frontend home page
-    const frontendUrl = process.env.FRONTEND_URL || 'https://cinemafo.lol';
-    res.redirect(frontendUrl);
-    
-  } catch (error) {
-    console.error('Referral redirect error:', error);
-    const frontendUrl = process.env.FRONTEND_URL || 'https://cinemafo.lol';
-    res.redirect(frontendUrl);
   }
 });
 
