@@ -2,7 +2,7 @@ const axios = require('axios');
 
 // Test the backend endpoints
 async function testBackendEndpoints() {
-  const baseURL = 'http://localhost:5000';
+  const baseURL = 'https://cinemafo.lol';
   
   const endpoints = [
     '/api/movies/top_rated',
