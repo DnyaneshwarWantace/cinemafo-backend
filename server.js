@@ -350,6 +350,48 @@ app.use('/api/admin', adminRoutes);
 // Referral routes
 app.use('/api/referral', referralRoutes);
 
+// Clean referral redirect route (for /referral/:code URLs)
+app.get('/referral/:code', async (req, res) => {
+  try {
+    const { code } = req.params;
+    const ip = req.ip || req.connection.remoteAddress || req.socket.remoteAddress;
+    const userAgent = req.get('User-Agent') || '';
+    
+    // Find the referral code
+    const Referral = require('./models/Referral');
+    const referral = await Referral.findOne({ 
+      code: code.toUpperCase(), 
+      isActive: true 
+    });
+    
+    if (!referral) {
+      // If referral code doesn't exist, redirect to home
+      const frontendUrl = process.env.FRONTEND_URL || 'https://cinemafo.lol';
+      return res.redirect(frontendUrl);
+    }
+    
+    // Track the visit
+    await referral.trackVisit(ip, userAgent, '/');
+    
+    // Set a cookie to track this user for conversion tracking
+    res.cookie('referral_source', code, { 
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+      httpOnly: false, // Allow frontend to read it
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax'
+    });
+    
+    // Redirect to frontend home page
+    const frontendUrl = process.env.FRONTEND_URL || 'https://cinemafo.lol';
+    res.redirect(frontendUrl);
+    
+  } catch (error) {
+    console.error('Referral redirect error:', error);
+    const frontendUrl = process.env.FRONTEND_URL || 'https://cinemafo.lol';
+    res.redirect(frontendUrl);
+  }
+});
+
 // Direct referral redirect route (for short URLs)
 app.get('/:code', async (req, res) => {
   try {
