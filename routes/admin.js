@@ -166,6 +166,267 @@ router.post('/refresh-token', async (req, res) => {
   }
 });
 
+// ==================== ACCOUNT MANAGEMENT ENDPOINTS ====================
+
+// Check if username exists (for forgot password)
+router.post('/check-username', async (req, res) => {
+  try {
+    const { username } = req.body;
+    
+    if (!username) {
+      return res.status(400).json({ error: 'Username is required' });
+    }
+
+    const admin = await Admin.findOne({ username });
+    
+    if (!admin) {
+      return res.status(404).json({ error: 'Username not found' });
+    }
+
+    // Check if admin has recovery codes available
+    const hasRecoveryCodes = admin.recoveryCodes && admin.recoveryCodes.some(c => !c.used);
+
+    res.json({ 
+      exists: true,
+      hasRecoveryCodes
+    });
+  } catch (error) {
+    console.error('Check username error:', error);
+    res.status(500).json({ error: 'Failed to check username' });
+  }
+});
+
+// Verify recovery code
+router.post('/verify-recovery-code', async (req, res) => {
+  try {
+    const { username, code } = req.body;
+    
+    if (!username || !code) {
+      return res.status(400).json({ error: 'Username and recovery code are required' });
+    }
+
+    const admin = await Admin.findOne({ username });
+    
+    if (!admin) {
+      return res.status(404).json({ error: 'Username not found' });
+    }
+
+    const isValid = admin.verifyRecoveryCode(code);
+    
+    if (!isValid) {
+      return res.status(401).json({ error: 'Invalid or already used recovery code' });
+    }
+
+    await admin.save();
+
+    // Generate a temporary reset token (valid for 10 minutes)
+    const resetToken = jwt.sign(
+      { adminId: admin._id, purpose: 'password-reset' },
+      process.env.JWT_SECRET || 'your-secret-key',
+      { expiresIn: '10m' }
+    );
+
+    res.json({ 
+      success: true,
+      resetToken,
+      message: 'Recovery code verified' 
+    });
+  } catch (error) {
+    console.error('Verify recovery code error:', error);
+    res.status(500).json({ error: 'Failed to verify recovery code' });
+  }
+});
+
+// Reset password (using reset token from security question or recovery code)
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { resetToken, newPassword } = req.body;
+    
+    if (!resetToken || !newPassword) {
+      return res.status(400).json({ error: 'Reset token and new password are required' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+    }
+
+    // Verify reset token
+    let decoded;
+    try {
+      decoded = jwt.verify(resetToken, process.env.JWT_SECRET || 'your-secret-key');
+    } catch (error) {
+      return res.status(401).json({ error: 'Invalid or expired reset token' });
+    }
+
+    if (decoded.purpose !== 'password-reset') {
+      return res.status(401).json({ error: 'Invalid token purpose' });
+    }
+
+    const admin = await Admin.findById(decoded.adminId);
+    
+    if (!admin) {
+      return res.status(404).json({ error: 'Admin not found' });
+    }
+
+    admin.password = newPassword;
+    admin.lastPasswordChange = new Date();
+    await admin.save();
+
+    res.json({ 
+      success: true,
+      message: 'Password reset successfully' 
+    });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
+// Change password (when logged in)
+router.post('/change-password', verifyToken, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current and new password are required' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters long' });
+    }
+
+    const admin = await Admin.findById(req.adminId);
+    
+    if (!admin) {
+      return res.status(404).json({ error: 'Admin not found' });
+    }
+
+    // Verify current password
+    const isMatch = await admin.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+
+    admin.password = newPassword;
+    admin.lastPasswordChange = new Date();
+    await admin.save();
+
+    res.json({ 
+      success: true,
+      message: 'Password changed successfully' 
+    });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ error: 'Failed to change password' });
+  }
+});
+
+// Change username (when logged in)
+router.post('/change-username', verifyToken, async (req, res) => {
+  try {
+    const { newUsername, password } = req.body;
+    
+    if (!newUsername || !password) {
+      return res.status(400).json({ error: 'New username and password are required' });
+    }
+
+    if (newUsername.length < 3) {
+      return res.status(400).json({ error: 'Username must be at least 3 characters long' });
+    }
+
+    const admin = await Admin.findById(req.adminId);
+    
+    if (!admin) {
+      return res.status(404).json({ error: 'Admin not found' });
+    }
+
+    // Verify password
+    const isMatch = await admin.comparePassword(password);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Password is incorrect' });
+    }
+
+    // Check if username already exists
+    const existingAdmin = await Admin.findOne({ username: newUsername });
+    if (existingAdmin && existingAdmin._id.toString() !== admin._id.toString()) {
+      return res.status(400).json({ error: 'Username already exists' });
+    }
+
+    admin.username = newUsername;
+    await admin.save();
+
+    res.json({ 
+      success: true,
+      username: newUsername,
+      message: 'Username changed successfully' 
+    });
+  } catch (error) {
+    console.error('Change username error:', error);
+    res.status(500).json({ error: 'Failed to change username' });
+  }
+});
+
+
+// Generate recovery codes (when logged in)
+router.post('/generate-recovery-codes', verifyToken, async (req, res) => {
+  try {
+    const { password } = req.body;
+    
+    if (!password) {
+      return res.status(400).json({ error: 'Password is required' });
+    }
+
+    const admin = await Admin.findById(req.adminId);
+    
+    if (!admin) {
+      return res.status(404).json({ error: 'Admin not found' });
+    }
+
+    // Verify password
+    const isMatch = await admin.comparePassword(password);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Password is incorrect' });
+    }
+
+    const codes = admin.generateRecoveryCodes(5);
+    await admin.save();
+
+    res.json({ 
+      success: true,
+      codes,
+      message: 'Recovery codes generated successfully. Save these codes in a safe place!' 
+    });
+  } catch (error) {
+    console.error('Generate recovery codes error:', error);
+    res.status(500).json({ error: 'Failed to generate recovery codes' });
+  }
+});
+
+// Get account info (when logged in)
+router.get('/account-info', verifyToken, async (req, res) => {
+  try {
+    const admin = await Admin.findById(req.adminId).select('-password');
+    
+    if (!admin) {
+      return res.status(404).json({ error: 'Admin not found' });
+    }
+
+    const unusedRecoveryCodes = admin.recoveryCodes 
+      ? admin.recoveryCodes.filter(c => !c.used).length 
+      : 0;
+
+    res.json({ 
+      username: admin.username,
+      unusedRecoveryCodes,
+      lastPasswordChange: admin.lastPasswordChange,
+      createdAt: admin.createdAt
+    });
+  } catch (error) {
+    console.error('Get account info error:', error);
+    res.status(500).json({ error: 'Failed to get account info' });
+  }
+});
+
 // Get site settings
 router.get('/settings', verifyToken, async (req, res) => {
   try {
