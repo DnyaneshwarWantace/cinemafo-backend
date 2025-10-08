@@ -50,12 +50,12 @@ router.get('/:code', async (req, res) => {
     });
     
     // Redirect to frontend home page
-    const frontendUrl = process.env.FRONTEND_URL || 'https://cinemafo.lol';
+    const frontendUrl = process.env.FRONTEND_URL || 'https://cinema.fo';
     res.redirect(frontendUrl);
     
   } catch (error) {
     console.error('Referral redirect error:', error);
-    const frontendUrl = process.env.FRONTEND_URL || 'https://cinemafo.lol';
+    const frontendUrl = process.env.FRONTEND_URL || 'https://cinema.fo';
     res.redirect(frontendUrl);
   }
 });

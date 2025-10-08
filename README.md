@@ -19,7 +19,7 @@ cp .env.example .env
 
 3. Configure environment variables in `.env`:
 ```
-BACKEND_URL=https://cinemafo.lol/api
+BACKEND_URL=https://cinema.fo/api
 TMDB_API_KEY=your_tmdb_api_key_here
 TMDB_BASE_URL=https://api.themoviedb.org/3
 PORT=5000
@@ -85,7 +85,7 @@ Note: Streaming will only work once the domain is whitelisted by the streaming p
 
 
 i backend is also pointing to the frontend  and frontned giving the cros error 
-@https://api.cinemafo.lol/api/tv/popular backend https://cinemafo.lol/ frontend domain
+@https://api.cinemafo.lol/api/tv/popular backend https://cinema.fo/ frontend domain
 hook.js:608 404 Error: User attempted to access non-existent route: /api/tv/popular
 # HTTP Redirect to HTTPS
 server {
@@ -120,7 +120,7 @@ server {
   ssl_certificate_key /etc/letsencrypt/live/www.cinemafo.lol/privkey.pem;
 
   location / {
-    proxy_pass https://cinemafo.lol;
+    proxy_pass https://cinema.fo;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection 'upgrade';
