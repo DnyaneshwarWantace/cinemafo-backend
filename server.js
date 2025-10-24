@@ -1391,7 +1391,7 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, '::', () => {
   console.log(`🎬 Cinema Nexus Backend running on port ${PORT}`);
   console.log(`🔗 Health check: ${BACKEND_URL}/health`);
   console.log(`🔑 API Keys: ${TMDB_API_KEYS.length} keys configured for rotation`);
