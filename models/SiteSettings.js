@@ -9,7 +9,7 @@ const siteSettingsSchema = new mongoose.Schema({
       },
       text: {
         type: String,
-        default: 'Welcome to Cinema.fo - Your premium streaming destination!'
+        default: 'Welcome to Cinema.bz - Your premium streaming destination!'
       },
       backgroundColor: {
         type: String,
@@ -70,7 +70,7 @@ const siteSettingsSchema = new mongoose.Schema({
     },
     aboutUs: {
       type: String,
-      default: 'Cinema.fo is your premier destination for streaming movies and TV shows.'
+      default: 'Cinema.bz is your premier destination for streaming movies and TV shows.'
     },
     socialLinks: {
       discord: {

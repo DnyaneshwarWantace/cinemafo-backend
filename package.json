@@ -1,7 +1,7 @@
 {
   "name": "cinema-fo-backend",
   "version": "1.0.0",
-  "description": "Backend for Cinema.fo streaming platform",
+  "description": "Backend for Cinema.bz streaming platform",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -31,6 +31,6 @@
     "tv-shows",
     "api"
   ],
-  "author": "Cinema.fo",
+  "author": "Cinema.bz",
   "license": "MIT"
 }

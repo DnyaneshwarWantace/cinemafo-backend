@@ -367,7 +367,7 @@ app.get('/:code', async (req, res) => {
     
     if (!referral) {
       // If referral code doesn't exist, redirect to home
-      const frontendUrl = process.env.FRONTEND_URL || 'https://cinema.fo';
+      const frontendUrl = process.env.FRONTEND_URL || 'https://cinema.bz';
       return res.redirect(frontendUrl);
     }
     
