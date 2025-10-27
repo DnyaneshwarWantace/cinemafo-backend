@@ -85,7 +85,7 @@ Note: Streaming will only work once the domain is whitelisted by the streaming p
 
 
 i backend is also pointing to the frontend  and frontned giving the cros error 
-@https://api.cinemafo.lol/api/tv/popular backend https://cinema.bz/ frontend domain
+@https://api.cinemafo.lol/api/tv/popular backend http://localhost:5000/ frontend domain
 hook.js:608 404 Error: User attempted to access non-existent route: /api/tv/popular
 # HTTP Redirect to HTTPS
 server {
@@ -120,7 +120,7 @@ server {
   ssl_certificate_key /etc/letsencrypt/live/www.cinemafo.lol/privkey.pem;
 
   location / {
-    proxy_pass https://cinema.bz;
+    proxy_pass http://localhost:5000;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection 'upgrade';

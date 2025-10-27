@@ -11,7 +11,7 @@ const FormData = require('form-data');
 const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
-const GoogleDriveService = require('../google-drive-service.js');
+const StorjService = require('../storj-service.js');
 
 // Configure Cloudinary
 cloudinary.config({
@@ -20,8 +20,36 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// Initialize Google Drive Service
-const googleDriveService = new GoogleDriveService();
+// Initialize Storj Service
+const storjService = new StorjService();
+
+// Helper function to generate dynamic URLs for ads
+function generateDynamicAdUrls(ads, req) {
+  const dynamicAds = {};
+  Object.keys(ads).forEach(adKey => {
+    const ad = ads[adKey];
+    if (ad.enabled && ad.cloudinaryUrl) {
+      // Check if it's a Storj filename (not a full URL)
+      if (ad.cloudinaryUrl.includes('_') && ad.cloudinaryUrl.endsWith('.gif') && !ad.cloudinaryUrl.startsWith('http')) {
+        // It's a Storj filename, generate dynamic URL
+        const backendUrl = req.headers.host ? 
+          `${req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http')}://${req.headers.host}/api` :
+          (process.env.FRONTEND_URL || process.env.BACKEND_URL || 'https://cinema.bz/api');
+        dynamicAds[adKey] = {
+          imageUrl: `${backendUrl}/storj-proxy/${ad.cloudinaryUrl}`,
+          clickUrl: ad.clickUrl
+        };
+      } else {
+        // It's already a full URL (legacy or external)
+        dynamicAds[adKey] = {
+          imageUrl: ad.cloudinaryUrl,
+          clickUrl: ad.clickUrl
+        };
+      }
+    }
+  });
+  return dynamicAds;
+}
 
 // Public endpoint to get site settings
 router.get('/public/settings', async (req, res) => {
@@ -35,6 +63,9 @@ router.get('/public/settings', async (req, res) => {
       settings = await SiteSettings.create({});
       console.log('Created default settings:', settings);
     }
+    
+    // Generate dynamic URLs for ads based on current request
+    const dynamicAds = generateDynamicAdUrls(settings.ads, req);
     
     // Only send necessary public settings
     const publicSettings = {
@@ -50,7 +81,7 @@ router.get('/public/settings', async (req, res) => {
           telegram: 'https://t.me/cinema-fo'
         }
       },
-      ads: settings.ads
+      ads: dynamicAds
     };
     
     console.log('Sending public settings:', publicSettings);
@@ -597,11 +628,11 @@ router.put('/settings/ads', verifyToken, async (req, res) => {
     
     await settings.save();
     
-            // Start background uploads to Google Drive for new images
+            // Start background uploads to Storj for new images
         if (adsToUpload.length > 0) {
-          console.log(`Starting background Google Drive upload for ${adsToUpload.length} ads`);
+          console.log(`Starting background Storj upload for ${adsToUpload.length} ads`);
           adsToUpload.forEach(({ adKey, imageUrl }) => {
-            uploadImageToGoogleDrive(adKey, imageUrl, settings._id);
+            uploadImageToStorj(adKey, imageUrl, settings._id);
           });
         }
     
@@ -612,27 +643,27 @@ router.put('/settings/ads', verifyToken, async (req, res) => {
   }
 });
 
-// Background image upload to Google Drive function
-async function uploadImageToGoogleDrive(adKey, imageUrl, settingsId) {
+// Background image upload to Storj function
+async function uploadImageToStorj(adKey, imageUrl, settingsId, req = null) {
   try {
-    console.log(`[Background] Starting Google Drive upload for ${adKey}: ${imageUrl}`);
+    console.log(`[Background] Starting Storj upload for ${adKey}: ${imageUrl}`);
     
-    // Upload to Google Drive using the service
-    const result = await googleDriveService.uploadGifFromUrl(imageUrl, adKey);
+    // Upload to Storj using the service (pass request for dynamic URL generation)
+    const result = await storjService.uploadGifFromUrl(imageUrl, adKey, req);
     
-    console.log(`[Background Google Drive] Successfully uploaded ${adKey}: ${result.displayUrl}`);
+    console.log(`[Background Storj] Successfully uploaded ${adKey}: ${result.displayUrl}`);
     
-    // Update the database with Google Drive URL
+    // Update the database with Storj URL
     const settings = await SiteSettings.findById(settingsId);
     if (settings && settings.ads[adKey]) {
       settings.ads[adKey].cloudinaryUrl = result.displayUrl;
       await settings.save();
-      console.log(`[Background] Successfully uploaded to Google Drive and updated ${adKey}: ${settings.ads[adKey].cloudinaryUrl}`);
+      console.log(`[Background] Successfully uploaded to Storj and updated ${adKey}: ${settings.ads[adKey].cloudinaryUrl}`);
     }
     
   } catch (error) {
-    console.error(`[Background] Error uploading image to Google Drive for ${adKey}:`, error);
-    // No fallback - Google Drive upload failed, log the error
+    console.error(`[Background] Error uploading image to Storj for ${adKey}:`, error);
+    // No fallback - Storj upload failed, log the error
   }
 }
 
@@ -655,28 +686,28 @@ router.post('/upload-ad-image', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'Invalid ad key' });
     }
     
-    console.log(`[Manual Upload] Starting Google Drive upload for ${adKey}: ${imageUrl}`);
+    console.log(`[Manual Upload] Starting Storj upload for ${adKey}: ${imageUrl}`);
     
-    // Upload to Google Drive using the service
-    const result = await googleDriveService.uploadGifFromUrl(imageUrl, adKey);
+    // Upload to Storj using the service (pass request for dynamic URL generation)
+    const result = await storjService.uploadGifFromUrl(imageUrl, adKey, req);
     
-    console.log(`[Google Drive] Successfully uploaded ${adKey}: ${result.displayUrl}`);
+    console.log(`[Storj] Successfully uploaded ${adKey}: ${result.displayUrl}`);
     
-    // Update the ad setting with Google Drive URL
+    // Update the ad setting with Storj URL
     settings.ads[adKey].cloudinaryUrl = result.displayUrl;
     await settings.save();
     
     res.json({ 
       success: true, 
       cloudinaryUrl: settings.ads[adKey].cloudinaryUrl,
-      message: 'Image uploaded to Google Drive successfully' 
+      message: 'Image uploaded to Storj successfully' 
     });
     
   } catch (error) {
-    console.error('Error uploading ad image to Google Drive:', error);
+    console.error('Error uploading ad image to Storj:', error);
     
     // Provide more specific error messages
-    let errorMessage = 'Failed to upload image to Google Drive';
+    let errorMessage = 'Failed to upload image to Storj';
     if (error.response?.status === 404) {
       errorMessage = 'Image not found at the provided URL';
     } else if (error.code === 'ENOTFOUND') {
@@ -686,11 +717,11 @@ router.post('/upload-ad-image', verifyToken, async (req, res) => {
     } else if (error.response?.status === 400) {
       errorMessage = 'Invalid image format or file too large';
     } else if (error.response?.status === 401) {
-      errorMessage = 'Google Drive authentication failed - please check your Google Drive credentials in .env file';
+      errorMessage = 'Storj authentication failed - please check your Storj credentials in .env file';
     } else if (error.response?.status === 403) {
-      errorMessage = 'Google Drive API access denied - check permissions and API quota';
+      errorMessage = 'Storj API access denied - check permissions and API quota';
     } else if (error.response?.status === 429) {
-      errorMessage = 'Google Drive API rate limit exceeded. Please try again later.';
+      errorMessage = 'Storj API rate limit exceeded. Please try again later.';
     } else if (error.message) {
       errorMessage = error.message;
     }
@@ -699,7 +730,48 @@ router.post('/upload-ad-image', verifyToken, async (req, res) => {
   }
 });
 
-// Note: Local image serving endpoint removed - using Google Drive only
+// Storj proxy endpoint - serves images from Storj using our credentials
+router.get('/storj-proxy/:filename', async (req, res) => {
+  try {
+    const { filename } = req.params;
+    
+    if (!filename) {
+      return res.status(400).json({ error: 'Filename is required' });
+    }
+    
+    console.log(`[Storj Proxy] Serving file: ${filename}`);
+    
+    // Get the file from Storj using our credentials
+    const params = {
+      Bucket: 'cinema-ads',
+      Key: filename
+    };
+    
+    // Get the file stream from Storj
+    const fileStream = storjService.s3.getObject(params).createReadStream();
+    
+    // Set appropriate headers
+    res.setHeader('Content-Type', 'image/gif');
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
+    res.setHeader('Access-Control-Allow-Origin', '*'); // Allow CORS
+    
+    // Pipe the file stream to the response
+    fileStream.pipe(res);
+    
+    fileStream.on('error', (error) => {
+      console.error(`[Storj Proxy] Error serving ${filename}:`, error.message);
+      if (!res.headersSent) {
+        res.status(404).json({ error: 'File not found' });
+      }
+    });
+    
+  } catch (error) {
+    console.error(`[Storj Proxy] Error:`, error.message);
+    res.status(500).json({ error: 'Failed to serve file' });
+  }
+});
+
+// Note: Local image serving endpoint removed - using Storj only
 
 // Update custom CSS
 router.put('/settings/css', verifyToken, async (req, res) => {

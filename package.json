@@ -9,6 +9,7 @@
     "create-admin": "node scripts/createAdmin.js"
   },
   "dependencies": {
+    "aws-sdk": "^2.1490.0",
     "axios": "^1.6.0",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^2.7.0",
