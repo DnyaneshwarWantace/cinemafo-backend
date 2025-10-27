@@ -23,33 +23,70 @@ cloudinary.config({
 // Initialize Storj Service
 const storjService = new StorjService();
 
-// Helper function to generate dynamic URLs for ads
-function generateDynamicAdUrls(ads, req) {
-  const dynamicAds = {};
-  Object.keys(ads).forEach(adKey => {
-    const ad = ads[adKey];
-    if (ad.enabled && ad.cloudinaryUrl) {
-      // Check if it's a Storj filename (not a full URL)
-      if (ad.cloudinaryUrl.includes('_') && ad.cloudinaryUrl.endsWith('.gif') && !ad.cloudinaryUrl.startsWith('http')) {
-        // It's a Storj filename, generate dynamic URL
-        const backendUrl = req.headers.host ? 
-          `${req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http')}://${req.headers.host}/api` :
-          (process.env.FRONTEND_URL || process.env.BACKEND_URL || 'https://cinema.bz/api');
-        dynamicAds[adKey] = {
-          imageUrl: `${backendUrl}/storj-proxy/${ad.cloudinaryUrl}`,
-          clickUrl: ad.clickUrl
-        };
-      } else {
-        // It's already a full URL (legacy or external)
-        dynamicAds[adKey] = {
-          imageUrl: ad.cloudinaryUrl,
-          clickUrl: ad.clickUrl
-        };
+// Background job to refresh expiring Storj URLs
+async function refreshExpiringUrls() {
+  try {
+    console.log('🔄 Checking for expiring Storj URLs...');
+    
+    const settings = await SiteSettings.findOne();
+    if (!settings) {
+      console.log('No settings found, skipping URL refresh');
+      return;
+    }
+
+    let refreshedCount = 0;
+    const adsToRefresh = [];
+
+    // Check each ad for expiring URLs
+    Object.entries(settings.ads).forEach(([adKey, adConfig]) => {
+      if (adConfig.cloudinaryUrl && storjService.isUrlExpiringSoon(adConfig.cloudinaryUrl)) {
+        adsToRefresh.push({ adKey, adConfig });
+      }
+    });
+
+    if (adsToRefresh.length === 0) {
+      console.log('✅ No URLs need refreshing');
+      return;
+    }
+
+    console.log(`🔄 Found ${adsToRefresh.length} URLs that need refreshing`);
+
+    // Refresh each URL
+    for (const { adKey, adConfig } of adsToRefresh) {
+      try {
+        // Extract file key from the URL
+        const urlObj = new URL(adConfig.cloudinaryUrl);
+        const fileKey = urlObj.pathname.substring(1); // Remove leading slash
+        
+        // Generate new pre-signed URL
+        const newUrl = await storjService.refreshPresignedUrl(fileKey, adKey);
+        
+        // Update the database
+        settings.ads[adKey].cloudinaryUrl = newUrl;
+        refreshedCount++;
+        
+        console.log(`✅ Refreshed URL for ${adKey}`);
+      } catch (error) {
+        console.error(`❌ Failed to refresh URL for ${adKey}:`, error.message);
       }
     }
-  });
-  return dynamicAds;
+
+    // Save all updates
+    if (refreshedCount > 0) {
+      await settings.save();
+      console.log(`✅ Successfully refreshed ${refreshedCount} URLs`);
+    }
+
+  } catch (error) {
+    console.error('❌ Error in URL refresh job:', error.message);
+  }
 }
+
+// Run URL refresh job every 6 hours
+setInterval(refreshExpiringUrls, 6 * 60 * 60 * 1000); // 6 hours
+
+// Run initial check after 1 minute
+setTimeout(refreshExpiringUrls, 60 * 1000); // 1 minute
 
 // Public endpoint to get site settings
 router.get('/public/settings', async (req, res) => {
@@ -63,9 +100,6 @@ router.get('/public/settings', async (req, res) => {
       settings = await SiteSettings.create({});
       console.log('Created default settings:', settings);
     }
-    
-    // Generate dynamic URLs for ads based on current request
-    const dynamicAds = generateDynamicAdUrls(settings.ads, req);
     
     // Only send necessary public settings
     const publicSettings = {
@@ -81,7 +115,7 @@ router.get('/public/settings', async (req, res) => {
           telegram: 'https://t.me/cinema-fo'
         }
       },
-      ads: dynamicAds
+      ads: settings.ads
     };
     
     console.log('Sending public settings:', publicSettings);
@@ -644,12 +678,12 @@ router.put('/settings/ads', verifyToken, async (req, res) => {
 });
 
 // Background image upload to Storj function
-async function uploadImageToStorj(adKey, imageUrl, settingsId, req = null) {
+async function uploadImageToStorj(adKey, imageUrl, settingsId) {
   try {
     console.log(`[Background] Starting Storj upload for ${adKey}: ${imageUrl}`);
     
-    // Upload to Storj using the service (pass request for dynamic URL generation)
-    const result = await storjService.uploadGifFromUrl(imageUrl, adKey, req);
+    // Upload to Storj using the service
+    const result = await storjService.uploadGifFromUrl(imageUrl, adKey);
     
     console.log(`[Background Storj] Successfully uploaded ${adKey}: ${result.displayUrl}`);
     
@@ -688,8 +722,8 @@ router.post('/upload-ad-image', verifyToken, async (req, res) => {
     
     console.log(`[Manual Upload] Starting Storj upload for ${adKey}: ${imageUrl}`);
     
-    // Upload to Storj using the service (pass request for dynamic URL generation)
-    const result = await storjService.uploadGifFromUrl(imageUrl, adKey, req);
+    // Upload to Storj using the service
+    const result = await storjService.uploadGifFromUrl(imageUrl, adKey);
     
     console.log(`[Storj] Successfully uploaded ${adKey}: ${result.displayUrl}`);
     
@@ -730,44 +764,15 @@ router.post('/upload-ad-image', verifyToken, async (req, res) => {
   }
 });
 
-// Storj proxy endpoint - serves images from Storj using our credentials
-router.get('/storj-proxy/:filename', async (req, res) => {
+// Manual endpoint to refresh expiring URLs (for testing)
+router.post('/refresh-storj-urls', verifyToken, async (req, res) => {
   try {
-    const { filename } = req.params;
-    
-    if (!filename) {
-      return res.status(400).json({ error: 'Filename is required' });
-    }
-    
-    console.log(`[Storj Proxy] Serving file: ${filename}`);
-    
-    // Get the file from Storj using our credentials
-    const params = {
-      Bucket: 'cinema-ads',
-      Key: filename
-    };
-    
-    // Get the file stream from Storj
-    const fileStream = storjService.s3.getObject(params).createReadStream();
-    
-    // Set appropriate headers
-    res.setHeader('Content-Type', 'image/gif');
-    res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
-    res.setHeader('Access-Control-Allow-Origin', '*'); // Allow CORS
-    
-    // Pipe the file stream to the response
-    fileStream.pipe(res);
-    
-    fileStream.on('error', (error) => {
-      console.error(`[Storj Proxy] Error serving ${filename}:`, error.message);
-      if (!res.headersSent) {
-        res.status(404).json({ error: 'File not found' });
-      }
-    });
-    
+    console.log('🔄 Manual URL refresh requested');
+    await refreshExpiringUrls();
+    res.json({ success: true, message: 'URL refresh job completed' });
   } catch (error) {
-    console.error(`[Storj Proxy] Error:`, error.message);
-    res.status(500).json({ error: 'Failed to serve file' });
+    console.error('Error in manual URL refresh:', error);
+    res.status(500).json({ error: 'Failed to refresh URLs' });
   }
 });
 

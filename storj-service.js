@@ -12,27 +12,6 @@ class StorjService {
     }
   }
 
-  // Get frontend URL from environment variables for proxy URLs
-  static getBackendUrl() {
-    return process.env.FRONTEND_URL || process.env.BACKEND_URL || 'https://cinema.bz/api';
-  }
-
-  // Generate dynamic URL based on request context
-  static generateProxyUrl(filename, req = null) {
-    let baseUrl;
-    
-    if (req && req.headers && req.headers.host) {
-      // Use the request's host (dynamic based on where request comes from)
-      const protocol = req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http');
-      baseUrl = `${protocol}://${req.headers.host}/api`;
-    } else {
-      // Fallback to environment variable
-      baseUrl = StorjService.getBackendUrl();
-    }
-    
-    return `${baseUrl}/storj-proxy/${filename}`;
-  }
-
   constructor() {
     this.s3 = null;
     this.bucketName = 'cinema-ads'; // Default bucket name
@@ -68,35 +47,17 @@ class StorjService {
   /**
    * Upload GIF from URL to Storj
    */
-  async uploadGifFromUrl(gifUrl, adKey, req = null) {
+  async uploadGifFromUrl(gifUrl, adKey) {
     let filepath = null;
     
     try {
       console.log(`[Storj] Starting upload for ${adKey}: ${gifUrl}`);
       
-      // Check if this is a Storj URL - if so, copy the existing file instead
-      if (gifUrl.includes('gateway.storjshare.io') || gifUrl.includes('/storj-proxy/')) {
-        console.log(`[Storj] Detected Storj URL for ${adKey} - copying existing file`);
-        
-        // Extract filename from Storj URL
-        let filename;
-        if (gifUrl.includes('/storj-proxy/')) {
-          filename = gifUrl.split('/storj-proxy/')[1];
-        } else {
-          filename = gifUrl.split('/cinema-ads/')[1];
-        }
-        
-        // Copy the existing file
-        const result = await this.copyStorjFile(filename, adKey, req);
-        console.log(`[Storj] Successfully copied ${adKey}: ${result.displayUrl}`);
-        return result;
-      }
-      
-      // Download the GIF from external URL
+      // Download the GIF
       filepath = await this.downloadFile(gifUrl, adKey);
       
       // Upload to Storj
-      const result = await this.uploadFile(filepath, adKey, req);
+      const result = await this.uploadFile(filepath, adKey);
       
       console.log(`[Storj] Successfully uploaded ${adKey}: ${result.displayUrl}`);
       return result;
@@ -123,12 +84,6 @@ class StorjService {
   async downloadFile(url, adKey) {
     try {
       console.log(`[Storj] Downloading ${adKey} from: ${url}`);
-      
-      // Check if this is a Storj URL - if so, we need to handle it differently
-      if (url.includes('gateway.storjshare.io') || url.includes('/storj-proxy/')) {
-        console.log(`[Storj] Detected Storj URL for ${adKey} - this should not be re-uploaded`);
-        throw new Error('Cannot re-upload from Storj URLs. Please use the original external URL instead.');
-      }
       
       const response = await axios({
         method: 'GET',
@@ -174,50 +129,9 @@ class StorjService {
   }
 
   /**
-   * Copy an existing Storj file to a new location (for reusing the same image)
-   */
-  async copyStorjFile(sourceFilename, newAdKey, req = null) {
-    try {
-      console.log(`[Storj] Copying file ${sourceFilename} for ${newAdKey}`);
-      
-      if (!this.s3) {
-        throw new Error('Storj not initialized');
-      }
-      
-      const newFilename = `${newAdKey}_${Date.now()}.gif`;
-      
-      // Copy the file within Storj
-      await this.s3.copyObject({
-        Bucket: this.bucketName,
-        CopySource: `${this.bucketName}/${sourceFilename}`,
-        Key: newFilename
-      }).promise();
-      
-      console.log(`[Storj] File copied: ${sourceFilename} -> ${newFilename}`);
-      
-      // Generate the proxy URL dynamically
-      const displayUrl = StorjService.generateProxyUrl(newFilename, req);
-      
-      return {
-        success: true,
-        fileId: newFilename,
-        displayUrl: newFilename, // Only save filename, not full URL
-        downloadUrl: newFilename, // Only save filename, not full URL
-        filename: newFilename,
-        size: 0, // We don't know the size without additional API call
-        mimeType: 'image/gif'
-      };
-      
-    } catch (error) {
-      console.error(`[Storj] Copy failed for ${newAdKey}:`, error.message);
-      throw error;
-    }
-  }
-
-  /**
    * Upload file to Storj
    */
-  async uploadFile(filepath, adKey, req = null) {
+  async uploadFile(filepath, adKey) {
     try {
       console.log(`[Storj] Uploading ${adKey} to Storj...`);
       
@@ -250,11 +164,42 @@ class StorjService {
       
       console.log(`[Storj] File uploaded for ${adKey} - Location: ${response.Location}`);
       
-      // Generate the display URL dynamically based on request context
-      const displayUrl = StorjService.generateProxyUrl(filename, req);
-      const downloadUrl = displayUrl; // Same URL for download
-       
-       console.log(`[Storj] Generated backend proxy URL for ${adKey}`);
+      // Generate the display URL - try different approaches for public access
+      let displayUrl = response.Location;
+      let downloadUrl = response.Location;
+      
+       // Try to make file truly public (no expiry)
+       try {
+         // First, try to set the file as public
+         await this.s3.putObjectAcl({
+           Bucket: this.bucketName,
+           Key: filename,
+           ACL: 'public-read'
+         }).promise();
+         
+         console.log(`[Storj] Set file as public for ${adKey}`);
+         // Use direct URL (no expiry)
+         displayUrl = response.Location;
+         downloadUrl = response.Location;
+         
+       } catch (aclError) {
+         console.warn(`[Storj] Could not set file as public, using pre-signed URL:`, aclError.message);
+         
+         // Fallback to pre-signed URL (7 days max)
+         try {
+           const presignedUrl = await this.s3.getSignedUrl('getObject', {
+             Bucket: this.bucketName,
+             Key: filename,
+             Expires: 604800 // 7 days in seconds (max allowed)
+           });
+           
+           displayUrl = presignedUrl;
+           downloadUrl = presignedUrl;
+           console.log(`[Storj] Generated pre-signed URL for ${adKey} (7 days expiry)`);
+         } catch (presignError) {
+           console.warn(`[Storj] Could not generate pre-signed URL, using direct URL:`, presignError.message);
+         }
+       }
       
       console.log(`[Storj] Generated URLs for ${adKey}:`);
       console.log(`[Storj]    Display: ${displayUrl}`);
@@ -263,8 +208,8 @@ class StorjService {
       return {
         success: true,
         fileId: filename, // Use filename as ID
-        displayUrl: filename, // Only save filename, not full URL
-        downloadUrl: filename, // Only save filename, not full URL
+        displayUrl: displayUrl,
+        downloadUrl: downloadUrl,
         filename: filename,
         size: stats.size,
         mimeType: 'image/gif'
@@ -342,32 +287,56 @@ class StorjService {
   }
 
   /**
-   * Set bucket policy to allow public read access
+   * Refresh pre-signed URL if it's close to expiring
    */
-  async setBucketPublicPolicy() {
+  async refreshPresignedUrl(fileKey, adKey) {
     try {
-      const bucketPolicy = {
-        Version: '2012-10-17',
-        Statement: [
-          {
-            Sid: 'PublicReadGetObject',
-            Effect: 'Allow',
-            Principal: '*',
-            Action: 's3:GetObject',
-            Resource: `arn:aws:s3:::${this.bucketName}/*`
-          }
-        ]
-      };
+      if (!this.s3) {
+        throw new Error('Storj not initialized');
+      }
 
-      await this.s3.putBucketPolicy({
+      // Generate new pre-signed URL (7 days expiry)
+      const presignedUrl = await this.s3.getSignedUrl('getObject', {
         Bucket: this.bucketName,
-        Policy: JSON.stringify(bucketPolicy)
-      }).promise();
-      
-      console.log(`[Storj] Bucket policy set for public access`);
+        Key: fileKey,
+        Expires: 604800 // 7 days in seconds
+      });
+
+      console.log(`[Storj] Refreshed pre-signed URL for ${adKey}`);
+      return presignedUrl;
     } catch (error) {
-      console.warn(`[Storj] Could not set bucket policy (this might be normal for Storj):`, error.message);
-      // Don't throw error - Storj might handle public access differently
+      console.error(`[Storj] Failed to refresh URL for ${adKey}:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if a pre-signed URL is close to expiring (within 1 day)
+   */
+  isUrlExpiringSoon(url) {
+    try {
+      const urlObj = new URL(url);
+      const expiresParam = urlObj.searchParams.get('X-Amz-Expires');
+      const dateParam = urlObj.searchParams.get('X-Amz-Date');
+      
+      if (!expiresParam || !dateParam) {
+        return false; // Not a pre-signed URL
+      }
+
+      // Parse the date and calculate expiry
+      const startDate = new Date(dateParam);
+      const expiresInSeconds = parseInt(expiresParam);
+      const expiryDate = new Date(startDate.getTime() + (expiresInSeconds * 1000));
+      const now = new Date();
+      
+      // Check if expires within 24 hours (86400 seconds)
+      const timeUntilExpiry = expiryDate.getTime() - now.getTime();
+      const oneDayInMs = 24 * 60 * 60 * 1000;
+      
+      return timeUntilExpiry < oneDayInMs;
+    } catch (error) {
+      console.warn(`[Storj] Could not parse URL expiry:`, error.message);
+      return false;
     }
   }
 }
